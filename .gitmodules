@@ -1,0 +1,6 @@
+[submodule "s4s-toolchain"]
+	path = s4s-toolchain
+	url = gitgate@mas.b-it-center.de:mnguy12s/s4s-toolchain.git
+[submodule "session-data"]
+	path = session-data
+	url = gitgate@mas.b-it-center.de:sweat-for-science/session-data.git

@@ -2,17 +2,14 @@
 
 import numpy as np
 
-import keras
-from keras.models import Sequential
-from keras.layers.core import Dense, Activation
-from keras.layers.recurrent import LSTM
-from keras.preprocessing.sequence import pad_sequences
 from keras.callbacks import CSVLogger
 
 import sweat4science as s4s
 from sweat4science.workspace.Workspace import Workspace
 
-workspace_folder = "/home/mnguy12s/rnd/session-data"
+import keras_lstm
+
+workspace_folder = "/home/minh/workspace/git/rnd/session-data"
 ws = Workspace(workspace_folder)
 user_name="MF83"
 experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01", "running_indoor_session_03$"]
@@ -41,18 +38,28 @@ test_data_x = test_data[:,:-1]
 test_data_y = test_data[:,-1:]
 
 # reshape input to [samples, time steps, features], 1 timestep per sample
-train_data_x = train_data_x.reshape((train_data_x.shape[0], 1, train_data_x.shape[1]))
-test_data_x = test_data_x.reshape((test_data_x.shape[0], 1, test_data_x.shape[1]))
+ntsteps = 5
+train_cutoff = train_data.shape[0] - (train_data.shape[0] % ntsteps)
+train_nsamples = int(train_cutoff/ntsteps)
+test_cutoff = test_data.shape[0] - (test_data.shape[0] % ntsteps)
+test_nsamples = int(test_cutoff/ntsteps)
+
+train_data_x = train_data_x[:train_cutoff, :].reshape((train_nsamples, ntsteps, train_data_x.shape[1]))
+train_data_y = train_data_y[:train_cutoff, :].reshape((train_nsamples, ntsteps * train_data_y.shape[1]))[:,-1:]
+test_data_x = test_data_x[:test_cutoff, :].reshape((test_nsamples, ntsteps, test_data_x.shape[1]))
+test_data_y = test_data_y[:test_cutoff, :].reshape((test_nsamples, ntsteps * test_data_y.shape[1]))[:,-1:]
+
+print(train_data_x.shape)
+print(train_data_y.shape)
+print(test_data_x.shape)
+print(test_data_y.shape)
 
 print("constructing LSTM model...")
 input_dim = train_data_x.shape[2]
 output_dim = train_data_y.shape[1]
 hidden_neurons = 400
-model = Sequential()
-model.add(LSTM(hidden_neurons, input_dim=input_dim, return_sequences=False))
-model.add(Dense(output_dim, input_dim=hidden_neurons))
-model.add(Activation('linear'))
-model.compile(loss='mean_squared_error', optimizer='rmsprop')
+model = keras_lstm.create_model(hidden_neurons, input_dim=None,
+                                input_shape=(ntsteps, train_data_x.shape[2]), output_dim=output_dim)
 
 print("training...")
 csv_logger = CSVLogger('training.log')

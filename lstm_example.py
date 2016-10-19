@@ -1,5 +1,4 @@
-from sweat4science.workspace.Workspace import Workspace
-import sweat4science as s4s
+#!/usr/bin/env python
 
 import numpy as np
 
@@ -8,8 +7,12 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation
 from keras.layers.recurrent import LSTM
 from keras.preprocessing.sequence import pad_sequences
+from keras.callbacks import CSVLogger
 
-workspace_folder = "/home/minh/workspace/git/rnd/session-data"
+import sweat4science as s4s
+from sweat4science.workspace.Workspace import Workspace
+
+workspace_folder = "/home/mnguy12s/rnd/session-data"
 ws = Workspace(workspace_folder)
 user_name="MF83"
 experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01", "running_indoor_session_03$"]
@@ -52,8 +55,10 @@ model.add(Activation('linear'))
 model.compile(loss='mean_squared_error', optimizer='rmsprop')
 
 print("training...")
+csv_logger = CSVLogger('training.log')
 model.fit(train_data_x, train_data_y, batch_size=(1),
-          nb_epoch=100, validation_data=(test_data_x, test_data_y), verbose=1)
+          nb_epoch=200, validation_data=(test_data_x, test_data_y),
+          callbacks=[csv_logger], verbose=1)
 
 # serialize model to JSON
 model_json = model.to_json()

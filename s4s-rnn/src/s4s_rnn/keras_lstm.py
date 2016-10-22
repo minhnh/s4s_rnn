@@ -2,7 +2,6 @@
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation
 from keras.layers.recurrent import LSTM
-from keras.callbacks import CSVLogger
 
 def create_model(hidden_neurons, input_dim, output_dim, input_shape=None):
     model = Sequential()

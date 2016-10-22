@@ -6,4 +6,7 @@ setup(
     name='s4s_rnn',
     packages=find_packages(where='./src'),
     package_dir={'': 'src'},
+    install_requires=[
+        'keras',
+    ]
 )

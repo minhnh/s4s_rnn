@@ -7,7 +7,7 @@ from keras.callbacks import CSVLogger
 import sweat4science as s4s
 from sweat4science.workspace.Workspace import Workspace
 
-import keras_lstm
+from s4s_rnn import keras_lstm, utils
 
 workspace_folder = "/home/minh/workspace/git/rnd/session-data"
 ws = Workspace(workspace_folder)
@@ -30,24 +30,15 @@ for ts in train_sessions:
     pass
 
 train_data = train_data.transpose()
-train_data_x = train_data[:,:-1]
-train_data_y = train_data[:,-1:]
 
 test_data = np.array([test_session.velocity, test_session.slope, test_session.acceleration, test_session.hbm]).transpose()
-test_data_x = test_data[:,:-1]
-test_data_y = test_data[:,-1:]
 
 # reshape input to [samples, time steps, features], 1 timestep per sample
 ntsteps = 5
-train_cutoff = train_data.shape[0] - (train_data.shape[0] % ntsteps)
-train_nsamples = int(train_cutoff/ntsteps)
-test_cutoff = test_data.shape[0] - (test_data.shape[0] % ntsteps)
-test_nsamples = int(test_cutoff/ntsteps)
-
-train_data_x = train_data_x[:train_cutoff, :].reshape((train_nsamples, ntsteps, train_data_x.shape[1]))
-train_data_y = train_data_y[:train_cutoff, :].reshape((train_nsamples, ntsteps * train_data_y.shape[1]))[:,-1:]
-test_data_x = test_data_x[:test_cutoff, :].reshape((test_nsamples, ntsteps, test_data_x.shape[1]))
-test_data_y = test_data_y[:test_cutoff, :].reshape((test_nsamples, ntsteps * test_data_y.shape[1]))[:,-1:]
+train_data_x = utils.reshape_array_by_time_steps(train_data[:, :-1], time_steps=ntsteps)
+train_data_y = train_data[-len(train_data_x):, -1:]
+test_data_x = utils.reshape_array_by_time_steps(test_data[:, :-1], time_steps=ntsteps)
+test_data_y = test_data[-len(test_data_x):, -1:]
 
 print(train_data_x.shape)
 print(train_data_y.shape)

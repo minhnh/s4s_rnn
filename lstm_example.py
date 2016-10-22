@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import os
 
 from keras.callbacks import CSVLogger
 
@@ -9,7 +10,7 @@ from sweat4science.workspace.Workspace import Workspace
 
 from s4s_rnn import keras_lstm, utils
 
-workspace_folder = "/home/minh/workspace/git/rnd/session-data"
+workspace_folder = os.path.join(os.getcwd(), "session-data")
 ws = Workspace(workspace_folder)
 user_name="MF83"
 experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01", "running_indoor_session_03$"]

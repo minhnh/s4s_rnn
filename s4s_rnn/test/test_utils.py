@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
+import os
 import unittest
 import numpy as np
 from s4s_rnn import utils
+from sweat4science import s4sconfig
+from sweat4science.workspace.Workspace import Workspace
 
 
 class TestUtils(unittest.TestCase):
@@ -51,6 +54,19 @@ class TestUtils(unittest.TestCase):
             pass
         self.assertEqual(utils.reshape_array_by_time_steps(np.arange(6).reshape(3, 2), time_steps=5).shape, (1, 3, 2),
                          msg="case of time_steps longer than number of samples not catched")
+        pass
+
+    def test_get_data_from_sessions(self):
+        workspace_folder = os.path.join(s4sconfig.workspace_dir, "session-data")
+        ws = Workspace(workspace_folder)
+        user_name = "MF83"
+        experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01"]
+        session_number = None
+        sessions = ws.get(user_name, experiment_name, session_number)
+        data_x, data_y = utils.get_data_from_sessions(sessions)
+        self.assertEqual(data_x.shape[1], 3, "data input dimension is not 3")
+        self.assertEqual(data_y.shape[1], 1, "data output dimension is not 1")
+        self.assertEqual(data_x.shape[0], data_y.shape[0], "number of samples do not match")
         pass
 
     pass

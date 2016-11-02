@@ -14,5 +14,5 @@ def create_model(hidden_neurons, input_dim, output_dim, input_shape=None):
 
     model.add(Dense(output_dim, input_dim=hidden_neurons))
     model.add(Activation('linear'))
-    model.compile(loss='mean_squared_error', optimizer='rmsprop')
+    #model.compile(loss='mean_squared_error', optimizer='rmsprop')
     return model

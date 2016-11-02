@@ -2,67 +2,92 @@
 
 import numpy as np
 import os
+import re
+import time
 
+from sklearn.model_selection import KFold
+
+from keras.models import model_from_json
 from keras.callbacks import CSVLogger
 
-import sweat4science as s4s
 from sweat4science.workspace.Workspace import Workspace
+from sweat4science.evaluation.sessionset import MF_sessionset as mfs
+from sweat4science import s4sconfig
 
 from s4s_rnn import keras_lstm, utils
 
-workspace_folder = os.path.join(os.getcwd(), "session-data")
+workspace_folder = os.path.join(s4sconfig.workspace_dir, "session-data")
 ws = Workspace(workspace_folder)
-user_name="MF83"
-experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01", "running_indoor_session_03$"]
-session_number = None
 
-sessions = ws.get(user_name, experiment_name, session_number)
-sessions = sessions[0:3]
+sessions = mfs.ICT_indoor(ws)
 
-train_sessions = sessions[0:-1]
-test_session = sessions[-1]
-
-print("processing data...")
-train_data = None
-
-for ts in train_sessions:
-    ts_train = np.array([ts.velocity, ts.slope, ts.acceleration, ts.hbm])
-    train_data = ts_train if train_data is None else np.append(train_data, ts_train, axis=1)
+# Removing "slope" sessions
+for session in sessions:
+    if len(re.findall("slope", str(session))) > 0:
+        sessions.remove(session)
     pass
+sessions = np.array(sessions)
 
-train_data = train_data.transpose()
+print("Using sessions: ")
+print("\n".join(map(str, sessions)))
 
-test_data = np.array([test_session.velocity, test_session.slope, test_session.acceleration, test_session.hbm]).transpose()
-
-# reshape input to [samples, time steps, features], 1 timestep per sample
+print("\nconstructing LSTM model...")
 ntsteps = 5
-train_data_x = utils.reshape_array_by_time_steps(train_data[:, :-1], time_steps=ntsteps)
-train_data_y = train_data[-len(train_data_x):, -1:]
-test_data_x = utils.reshape_array_by_time_steps(test_data[:, :-1], time_steps=ntsteps)
-test_data_y = test_data[-len(test_data_x):, -1:]
-
-print(train_data_x.shape)
-print(train_data_y.shape)
-print(test_data_x.shape)
-print(test_data_y.shape)
-
-print("constructing LSTM model...")
-input_dim = train_data_x.shape[2]
-output_dim = train_data_y.shape[1]
+input_dim = 3
+output_dim = 1
 hidden_neurons = 400
+num_epoch = 1
 model = keras_lstm.create_model(hidden_neurons, input_dim=None,
-                                input_shape=(ntsteps, train_data_x.shape[2]), output_dim=output_dim)
-
-print("training...")
-csv_logger = CSVLogger('training.log')
-model.fit(train_data_x, train_data_y, batch_size=(1),
-          nb_epoch=200, validation_data=(test_data_x, test_data_y),
-          callbacks=[csv_logger], verbose=1)
+                                input_shape=(ntsteps, input_dim),
+                                output_dim=output_dim)
+# Construct meaningful base name
+base_name = "lstm_indoor_" + str(ntsteps) + "step_" + str(input_dim) + "in_" + str(hidden_neurons) + "hidden_"\
+            + time.strftime("%Y%m%d") + "_" + str(num_epoch) + "epoch_"
+base_name = os.path.join("train_results", base_name)
+print(base_name)
 
 # serialize model to JSON
 model_json = model.to_json()
-with open("model.json", "w") as json_file:
+model_file_name = base_name  + "model.json"
+with open(model_file_name, "w") as json_file:
     json_file.write(model_json)
-# serialize weights to HDF5
-model.save_weights("weights.h5")
-print("Saved model to disk")
+    pass
+
+# Cross validation training
+kf = KFold(len(sessions))
+for train_index, test_index in kf.split(sessions):
+    print("\n--------------------------\n")
+    train_sessions = sessions[train_index]
+    test_sessions = sessions[test_index]
+    print("Training on:\n" + "\n".join(map(str, train_sessions)))
+    print("\nTesting on:\n" + "\n".join(map(str, test_sessions)))
+
+    train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions)
+    train_data_x = utils.reshape_array_by_time_steps(train_data_x, time_steps=ntsteps)
+    train_data_y = train_data_y[-len(train_data_x):]
+    test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions)
+    test_data_x = utils.reshape_array_by_time_steps(test_data_x, time_steps=ntsteps)
+    test_data_y = test_data_y[-len(test_data_x):]
+
+    print("\nLoading model from: " + model_file_name)
+    json_file = open(model_file_name, 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    loaded_model.compile(loss='mean_squared_error', optimizer='rmsprop')
+
+    match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
+    # put name of evaluation set in saved filenames
+    cross_validation_name = base_name + match.groups()[0] + "_" + match.groups()[1] + "_"
+    print("\nTraining...")
+    csv_logger = CSVLogger(cross_validation_name + "training.log")
+    loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
+                     nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
+                     callbacks=[csv_logger], verbose=1)
+
+    # serialize weights to HDF5
+    loaded_model.save_weights(cross_validation_name + "weights.h5")
+    print("Saved model to disk")
+
+    pass
+

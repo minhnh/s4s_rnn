@@ -27,10 +27,10 @@ def generate_sinx_plus_x(num_samples=1000, x1_max=200, x2_max=50):
 def main():
     data = np.genfromtxt("artificial_data/sinx_plus_x.csv", delimiter=',')
     num_train = int(0.9*len(data))
-    train_data_x = data[:num_train, :-1]
-    train_data_y = data[:num_train, -1:]
-    test_data_x = data[num_train:, :-1]
-    test_data_y = data[num_train:, -1:]
+    train_data_x_ = data[:num_train, :-1]
+    train_data_y_ = data[:num_train, -1:]
+    test_data_x_ = data[num_train:, :-1]
+    test_data_y_ = data[num_train:, -1:]
 
     print("\nconstructing LSTM model...")
     input_dim = 2
@@ -53,10 +53,10 @@ def main():
             json_file.write(model_json)
             pass
 
-        train_data_x = utils.reshape_array_by_time_steps(train_data_x, time_steps=ntsteps)
-        train_data_y = train_data_y[-len(train_data_x):]
-        test_data_x = utils.reshape_array_by_time_steps(test_data_x, time_steps=ntsteps)
-        test_data_y = test_data_y[-len(test_data_x):]
+        train_data_x = utils.reshape_array_by_time_steps(train_data_x_, time_steps=ntsteps)
+        train_data_y = train_data_y_[-len(train_data_x):]
+        test_data_x = utils.reshape_array_by_time_steps(test_data_x_, time_steps=ntsteps)
+        test_data_y = test_data_y_[-len(test_data_x):]
 
         model.compile(loss='mean_squared_error', optimizer='rmsprop')
 
@@ -77,3 +77,4 @@ def main():
 if __name__ == "__main__":
     main()
     pass
+

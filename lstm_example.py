@@ -32,34 +32,32 @@ print("Using sessions: ")
 print("\n".join(map(str, sessions)))
 
 print("\nconstructing LSTM model...")
-#ntsteps = 5
 input_dim = 4
 output_dim = 1
 hidden_neurons = 400
 num_epoch = 200
-model = keras_lstm.create_model(hidden_neurons, input_dim=None,
-                                input_shape=(ntsteps, input_dim),
-                                output_dim=output_dim)
-# Construct meaningful base name
-base_name = "lstm_indoor_" + str(ntsteps) + "step_" + str(input_dim) + "in_" + str(hidden_neurons) + "hidden_"\
-            + time.strftime("%Y%m%d") + "_" + str(num_epoch) + "epoch_"
-base_name = os.path.join("train_results", base_name)
-print(base_name)
-
-# serialize model to JSON
-model_json = model.to_json()
-model_file_name = base_name  + "model.json"
-with open(model_file_name, "w") as json_file:
-    json_file.write(model_json)
-    pass
 
 # Cross validation training
 kf = KFold(len(sessions))
 
 for ntsteps in [5, 10, 15]:
+    model = keras_lstm.create_model(hidden_neurons, input_dim=None,
+                                    input_shape=(ntsteps, input_dim),
+                                    output_dim=output_dim)
+    # Construct meaningful base name
+    base_name = "lstm_indoor_" + str(ntsteps) + "step_" + str(input_dim) + "in_" + str(hidden_neurons) + "hidden_"\
+                + time.strftime("%Y%m%d") + "_" + str(num_epoch) + "epoch_"
+    base_name = os.path.join("train_results", base_name)
+
+    # serialize model to JSON
+    model_json = model.to_json()
+    model_file_name = base_name  + "model.json"
+    with open(model_file_name, "w") as json_file:
+        json_file.write(model_json)
+        pass
     print("\n----------------------------------------------------\n")
+    print(base_name)
     print("Looking back %d time steps\n" % (ntsteps))
-    print("\n----------------------------------------------------\n")
     for train_index, test_index in kf.split(sessions):
         print("\n--------------------------\n")
         train_sessions = sessions[train_index]

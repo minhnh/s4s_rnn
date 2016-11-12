@@ -57,16 +57,18 @@ class TestUtils(unittest.TestCase):
         pass
 
     def test_get_data_from_sessions(self):
+        #TODO: test optional parameters
         workspace_folder = os.path.join(s4sconfig.workspace_dir, "session-data")
         ws = Workspace(workspace_folder)
         user_name = "MF83"
         experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01"]
         session_number = None
         sessions = ws.get(user_name, experiment_name, session_number)
-        data_x, data_y = utils.get_data_from_sessions(sessions)
-        self.assertEqual(data_x.shape[1], 3, "data input dimension is not 3")
+        data_x, data_y, normalization = utils.get_data_from_sessions(sessions, return_norm=True)
+        self.assertEqual(data_x.shape[1], 4, "data input dimension is not 3")
         self.assertEqual(data_y.shape[1], 1, "data output dimension is not 1")
         self.assertEqual(data_x.shape[0], data_y.shape[0], "number of samples do not match")
+        self.assertEqual(len(normalization), 2, "normalization vector should be of length 2")
         pass
 
     pass

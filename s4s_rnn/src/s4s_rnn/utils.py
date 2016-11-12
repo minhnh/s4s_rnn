@@ -31,7 +31,7 @@ def reshape_array_by_time_steps(input_array, time_steps=1):
     return result
 
 
-def get_data_from_sessions(sessions, output_dim=1):
+def get_data_from_sessions(sessions, output_dim=1, normalize=True, return_norm=False):
     """
     Create numpy data arrays from sweat4science.messages.Session objects
     :param sessions: list of sweat4science.messages.Session objects
@@ -40,12 +40,22 @@ def get_data_from_sessions(sessions, output_dim=1):
     """
     data = None
     for s in sessions:
-        sample = np.array([s.velocity, s.slope, s.acceleration, s.hbm])
-        data = sample if data is None else np.append(data, sample, axis=1)
+        sample = np.array([s.velocity, s.time, s.distance, s.acceleration, s.hbm], ndmin=2).T
+        data = sample if data is None else np.append(data, sample, axis=0)
         pass
-    data = data.transpose()
 
     if output_dim > len(data[0]):
         return None
 
-    return data[:, :-output_dim], data[:, -output_dim:]
+    normalization = None
+    if normalize:
+        data_mean = np.mean(data, axis=0)
+        data_std = np.std(data, axis=0)
+        data = (data - data_mean) / data_std
+        normalization = (data_mean, data_std)
+        pass
+
+    if return_norm:
+        return data[:, :-output_dim], data[:, -output_dim:], normalization
+    else:
+        return data[:, :-output_dim], data[:, -output_dim:]

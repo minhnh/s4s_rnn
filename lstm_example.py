@@ -33,10 +33,10 @@ print("\n".join(map(str, sessions)))
 
 print("\nconstructing LSTM model...")
 ntsteps = 5
-input_dim = 3
+input_dim = 4
 output_dim = 1
 hidden_neurons = 400
-num_epoch = 1
+num_epoch = 200
 model = keras_lstm.create_model(hidden_neurons, input_dim=None,
                                 input_shape=(ntsteps, input_dim),
                                 output_dim=output_dim)

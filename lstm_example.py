@@ -32,7 +32,7 @@ print("Using sessions: ")
 print("\n".join(map(str, sessions)))
 
 print("\nconstructing LSTM model...")
-ntsteps = 5
+#ntsteps = 5
 input_dim = 4
 output_dim = 1
 hidden_neurons = 400
@@ -55,39 +55,45 @@ with open(model_file_name, "w") as json_file:
 
 # Cross validation training
 kf = KFold(len(sessions))
-for train_index, test_index in kf.split(sessions):
-    print("\n--------------------------\n")
-    train_sessions = sessions[train_index]
-    test_sessions = sessions[test_index]
-    print("Training on:\n" + "\n".join(map(str, train_sessions)))
-    print("\nTesting on:\n" + "\n".join(map(str, test_sessions)))
 
-    train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions)
-    train_data_x = utils.reshape_array_by_time_steps(train_data_x, time_steps=ntsteps)
-    train_data_y = train_data_y[-len(train_data_x):]
-    test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions)
-    test_data_x = utils.reshape_array_by_time_steps(test_data_x, time_steps=ntsteps)
-    test_data_y = test_data_y[-len(test_data_x):]
+for ntsteps in [5, 10, 15]:
+    print("\n----------------------------------------------------\n")
+    print("Looking back %d time steps\n" % (ntsteps))
+    print("\n----------------------------------------------------\n")
+    for train_index, test_index in kf.split(sessions):
+        print("\n--------------------------\n")
+        train_sessions = sessions[train_index]
+        test_sessions = sessions[test_index]
+        print("Training on:\n" + "\n".join(map(str, train_sessions)))
+        print("\nTesting on:\n" + "\n".join(map(str, test_sessions)))
 
-    print("\nLoading model from: " + model_file_name)
-    json_file = open(model_file_name, 'r')
-    loaded_model_json = json_file.read()
-    json_file.close()
-    loaded_model = model_from_json(loaded_model_json)
-    loaded_model.compile(loss='mean_squared_error', optimizer='rmsprop')
+        train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions)
+        train_data_x = utils.reshape_array_by_time_steps(train_data_x, time_steps=ntsteps)
+        train_data_y = train_data_y[-len(train_data_x):]
+        test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions)
+        test_data_x = utils.reshape_array_by_time_steps(test_data_x, time_steps=ntsteps)
+        test_data_y = test_data_y[-len(test_data_x):]
 
-    match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
-    # put name of evaluation set in saved filenames
-    cross_validation_name = base_name + match.groups()[0] + "_" + match.groups()[1] + "_"
-    print("\nTraining...")
-    csv_logger = CSVLogger(cross_validation_name + "training.log")
-    loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
-                     nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
-                     callbacks=[csv_logger], verbose=1)
+        print("\nLoading model from: " + model_file_name)
+        json_file = open(model_file_name, 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        loaded_model = model_from_json(loaded_model_json)
+        loaded_model.compile(loss='mean_squared_error', optimizer='rmsprop')
 
-    # serialize weights to HDF5
-    loaded_model.save_weights(cross_validation_name + "weights.h5")
-    print("Saved model to disk")
+        match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
+        # put name of evaluation set in saved filenames
+        cross_validation_name = base_name + match.groups()[0] + "_" + match.groups()[1] + "_"
+        print("\nTraining...")
+        csv_logger = CSVLogger(cross_validation_name + "training.log")
+        loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
+                         nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
+                         callbacks=[csv_logger], verbose=1)
 
+        # serialize weights to HDF5
+        loaded_model.save_weights(cross_validation_name + "weights.h5")
+        print("Saved model to disk")
+
+        pass
     pass
 

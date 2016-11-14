@@ -79,21 +79,15 @@ def main(num_epoch):
             # put name of evaluation set in saved filenames
             cross_validation_name = base_name + match.groups()[0] + "_" + match.groups()[1] + "_"
 
-            test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions)
-            test_data_x = utils.reshape_array_by_time_steps(test_data_x, time_steps=ntsteps)
-            test_data_y = test_data_y[-len(test_data_x):]
+            train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions, ntsteps)
+            test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, ntsteps)
 
+            print(train_data_x.shape)
+            print(train_data_y.shape)
             csv_logger = CSVLogger(cross_validation_name + "training.log", append=False)
-            for session in train_sessions:
-                print("\nTraining on: %s\n" % (str(session)))
-                train_data_x, train_data_y = utils.get_data_from_sessions([session])
-                train_data_x = utils.reshape_array_by_time_steps(train_data_x, time_steps=ntsteps)
-                train_data_y = train_data_y[-len(train_data_x):]
-                loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
-                                 nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
-                                 callbacks=[csv_logger], verbose=2)
-                csv_logger = CSVLogger(cross_validation_name + "training.log", append=True)
-                pass
+            loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
+                             nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
+                             callbacks=[csv_logger], verbose=2)
 
             # serialize weights to HDF5
             loaded_model.save_weights(cross_validation_name + "weights.h5")

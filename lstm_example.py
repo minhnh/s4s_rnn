@@ -9,7 +9,7 @@ import time
 from sklearn.model_selection import KFold
 
 from keras.models import model_from_json
-from keras.callbacks import CSVLogger
+from keras.callbacks import CSVLogger, ReduceLROnPlateau
 
 from sweat4science.workspace.Workspace import Workspace
 from sweat4science.evaluation.sessionset import MF_sessionset as mfs
@@ -59,7 +59,7 @@ def main(num_epoch):
             json_file.write(model_json)
             pass
         print("\n----------------------------------------------------\n")
-        print(base_name)
+        print("Base file name: %s" % (base_name))
         print("Looking back %d time steps\n" % (ntsteps))
         for train_index, test_index in kf.split(sessions):
             print("\n--------------------------\n")
@@ -83,9 +83,10 @@ def main(num_epoch):
             test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, ntsteps)
 
             csv_logger = CSVLogger(cross_validation_name + "training.log", append=False)
+            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=10, min_lr=0.001)
             loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
                              nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
-                             callbacks=[csv_logger], verbose=2)
+                             callbacks=[csv_logger, reduce_lr], verbose=2)
 
             # serialize weights to HDF5
             loaded_model.save_weights(cross_validation_name + "weights.h5")

@@ -19,7 +19,8 @@ class TestUtils(unittest.TestCase):
         test_input_array = np.arange(12).reshape(4, 3)
         ntstep = 2
         test_result_array = np.array(
-            [[[0,  1,  2], [3,  4,  5]],
+            [[[0,  1,  2], [0,  1,  2]],
+             [[0,  1,  2], [3,  4,  5]],
              [[3,  4,  5], [6,  7,  8]],
              [[6,  7,  8], [9, 10, 11]]])
         self.assertTrue(np.allclose(utils.reshape_array_by_time_steps(test_input_array, ntstep), test_result_array),
@@ -39,8 +40,8 @@ class TestUtils(unittest.TestCase):
                           % (time_steps, input_dim, num_sample))
                     pass
                 else:
-                    self.assertEqual(test_output.shape, (num_sample - time_steps + 1, time_steps, input_dim),
-                                     msg="Dimensions of output arrays does not match with expected")
+                    self.assertEqual(test_output.shape, (num_sample, time_steps, input_dim),
+                                     msg="Dimensions of output arrays does not match expected")
                     pass
                 pass
             pass
@@ -52,7 +53,7 @@ class TestUtils(unittest.TestCase):
             self.assertRaises(ValueError, utils.reshape_array_by_time_steps,
                               np.arange(6).reshape(3, 2), time_steps=wrong_time_steps)
             pass
-        self.assertEqual(utils.reshape_array_by_time_steps(np.arange(6).reshape(3, 2), time_steps=5).shape, (1, 3, 2),
+        self.assertEqual(utils.reshape_array_by_time_steps(np.arange(6).reshape(3, 2), time_steps=5).shape, (3, 3, 2),
                          msg="case of time_steps longer than number of samples not catched")
         pass
 

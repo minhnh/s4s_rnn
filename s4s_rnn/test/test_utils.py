@@ -56,7 +56,7 @@ class TestUtils(unittest.TestCase):
                          msg="case of time_steps longer than number of samples not catched")
         pass
 
-    def test_get_data_from_session(self):
+    def test_get_data_from_sessions(self):
         #TODO: test optional parameters
         workspace_folder = os.path.join(s4sconfig.workspace_dir, "session-data")
         ws = Workspace(workspace_folder)
@@ -64,12 +64,13 @@ class TestUtils(unittest.TestCase):
         experiment_name = ["running_indoor_lactate_test", "running_indoor_session_01"]
         session_number = None
         sessions = ws.get(user_name, experiment_name, session_number)
-        for session in sessions:
-            data_x, data_y, normalization = utils.get_data_from_session(session, return_norm=True)
-            self.assertEqual(data_x.shape[1], 4, "data input dimension is not 4")
+        for ntsteps in range(1, 10):
+            data_x, data_y = utils.get_data_from_sessions(sessions, ntsteps)
+            self.assertEqual(data_x.shape[2], 4, "data input dimension is not 4")
+            self.assertEqual(data_x.shape[1], ntsteps, "second dimension of array should "
+                                                       "equal number of time steps")
             self.assertEqual(data_y.shape[1], 1, "data output dimension is not 1")
             self.assertEqual(data_x.shape[0], data_y.shape[0], "number of samples do not match")
-            self.assertEqual(len(normalization), 2, "normalization vector should be of length 2")
             pass
         pass
 

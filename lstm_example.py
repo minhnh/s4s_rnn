@@ -82,8 +82,6 @@ def main(num_epoch):
             train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions, ntsteps)
             test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, ntsteps)
 
-            print(train_data_x.shape)
-            print(train_data_y.shape)
             csv_logger = CSVLogger(cross_validation_name + "training.log", append=False)
             loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
                              nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),

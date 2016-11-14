@@ -34,51 +34,46 @@ def reshape_array_by_time_steps(input_array, time_steps=1):
 def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True, return_norm=False):
     """
 
-    :param sessions:
-    :param num_timesteps:
+    :param sessions: list of sweat4science.messages.Session object
+    :param num_timesteps: number of lookback time steps, second dimension of Tensorflow shape
     :param output_dim:
     :param normalize:
     :param return_norm:
     :return:
     """
+    data_multiple_arrays = []
+    data_single_array = None
+    for s in sessions:
+        data = np.array([s.velocity, s.time, s.distance, s.acceleration, s.hbm], ndmin=2).T
+        data_multiple_arrays.append(data)
+        data_single_array = data if data_single_array is None else \
+            np.append(data_single_array, data, axis=0)
+        pass
+
+    data_mean = None
+    data_std = None
+    if normalize:
+        data_mean = np.mean(data, axis=0)
+        data_std = np.std(data, axis=0)
+        pass
+
     train_data_x = None
     train_data_y = None
-    for s in sessions:
-        train_data_x_, train_data_y_ = get_data_from_session(s, output_dim=output_dim,
-                                                             normalize=normalize,
-                                                             return_norm=return_norm)
+    for data in data_multiple_arrays:
+        if normalize:
+            data = (data - data_mean) / data_std
+            pass
+
+        train_data_x_, train_data_y_ = data[:, :-output_dim], data[:, -output_dim:]
         train_data_x_ = reshape_array_by_time_steps(train_data_x_, time_steps=num_timesteps)
         train_data_y_ = train_data_y_[-len(train_data_x_):]
+
         train_data_x = train_data_x_ if train_data_x is None else \
             np.append(train_data_x, train_data_x_, axis=0)
         train_data_y = train_data_y_ if train_data_y is None else \
             np.append(train_data_y, train_data_y_, axis=0)
         pass
-    return train_data_x, train_data_y
-
-
-def get_data_from_session(session, output_dim=1, normalize=True, return_norm=False):
-    """
-    Create numpy data arrays from sweat4science.messages.Session objects
-    :param session: sweat4science.messages.Session object
-    :param output_dim: optional, number of output dimensions
-    :return: arrays of input and output
-    """
-    data = np.array([session.velocity, session.time, session.distance,
-                     session.acceleration, session.hbm], ndmin=2).T
-
-    if output_dim > len(data[0]):
-        return None
-
-    normalization = None
-    if normalize:
-        data_mean = np.mean(data, axis=0)
-        data_std = np.std(data, axis=0)
-        data = (data - data_mean) / data_std
-        normalization = (data_mean, data_std)
-        pass
-
     if return_norm:
-        return data[:, :-output_dim], data[:, -output_dim:], normalization
+        return train_data_x, train_data_y, data_mean, data_std
     else:
-        return data[:, :-output_dim], data[:, -output_dim:]
+        return train_data_x, train_data_y

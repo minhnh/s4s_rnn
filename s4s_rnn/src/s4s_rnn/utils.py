@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def reshape_array_by_time_steps(input_array, time_steps=1):
@@ -80,3 +81,67 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         return data_x, data_y, data_mean, data_std
     else:
         return data_x, data_y
+
+
+def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std):
+    """
+    Predict output using given model and
+
+    :param model: Keras model for prediction
+    :param weights_file: H5 file containing weights. If None will skip loading weights and compiling
+    :param data_x: input data
+    :param data_y: actual output data
+    :param y_mean: output mean
+    :param y_std: output standard deviation
+    :return:
+    """
+    # Prepare model
+    if weights_file is not None:
+        model.load_weights(weights_file)
+        model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['mse'])
+        pass
+    # Run prediction
+    prediction = model.predict(data_x)
+    # Unnormalize and calculate error
+    data_y_unnormed = data_y * y_std + y_mean
+    prediction_unnormed = prediction * y_std + y_mean
+    mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
+    return data_y_unnormed, prediction_unnormed, mse
+
+
+def plot_predictions(predictions, targets, file_name,
+                     title, y_label="Heart rate (hbm)", x_label="Time steps",
+                     save_plot=False, show_plot=True):
+    """
+    Visualise comparison between prediction and actual data
+
+    :param predictions: predicted outputs
+    :param targets: actual outputs
+    :param file_name: name of image file for saving plot
+    :param title:
+    :param y_label:
+    :param x_label:
+    :param save_plot: if True will write plot image to file_name
+    :param show_plot: if True will show plot
+    :return: None
+    """
+    plt.figure(figsize=(10, 7))
+
+    line1, = plt.plot(predictions, '-or', label='Predictions')
+    line2, = plt.plot(targets, '-+g', label='Actual outputs')
+
+    plt.legend(handles=[line1, line2], loc=4)
+    plt.title(title)
+    plt.ylabel(y_label)
+    plt.xlabel(x_label)
+    plt.grid()
+
+    if save_plot and type(file_name).__name__ == 'str':
+        plt.savefig(file_name)
+        pass
+
+    if show_plot:
+        plt.show()
+        pass
+    pass
+

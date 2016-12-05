@@ -1,9 +1,19 @@
-
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation
 from keras.layers.recurrent import LSTM
 
-def create_model(hidden_neurons, input_dim, output_dim, input_shape=None):
+
+def create_model(model_name, hidden_neurons, input_dim, output_dim, input_shape=None):
+    model = None
+    if model_name == 'lstm':
+        model = create_model_lstm(hidden_neurons, input_dim, output_dim, input_shape)
+        pass
+    elif model_name == 'gru':
+        pass
+    return model
+
+
+def create_model_lstm(hidden_neurons, input_dim, output_dim, input_shape=None):
     model = Sequential()
     if input_shape is None:
         model.add(LSTM(hidden_neurons, input_dim=input_dim, return_sequences=False))

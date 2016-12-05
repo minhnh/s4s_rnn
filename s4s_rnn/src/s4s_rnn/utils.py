@@ -83,7 +83,7 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         return data_x, data_y
 
 
-def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std):
+def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std, horizon=None):
     """
     Predict output using given model and
 
@@ -93,6 +93,7 @@ def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std):
     :param data_y: actual output data
     :param y_mean: output mean
     :param y_std: output standard deviation
+    :param horizon: time horizon for prediction, run full simulation if None
     :return:
     """
     # Prepare model
@@ -100,6 +101,15 @@ def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std):
         model.load_weights(weights_file)
         model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['mse'])
         pass
+
+    # if horizon is not None train on [:-horizon] before predicting
+    if horizon is not None:
+        model.fit(data_x[:-horizon], data_y[:-horizon], batch_size=(1),
+                  nb_epoch=1, validation_split=0.0, verbose=0)
+        data_x = data_x[-horizon:]
+        data_y = data_y[-horizon:]
+        pass
+
     # Run prediction
     prediction = model.predict(data_x)
     # Unnormalize and calculate error

@@ -1,24 +1,35 @@
 #!/usr/bin/env python
 
-import sys
-import numpy as np
 import os
 import re
 import time
-
-from sklearn.model_selection import KFold
-
-from keras.models import model_from_json
-from keras.callbacks import CSVLogger, ReduceLROnPlateau
-
-from sweat4science.workspace.Workspace import Workspace
-from sweat4science.evaluation.sessionset import MF_sessionset as mfs
-from sweat4science import s4sconfig
-
-from s4s_rnn import keras_lstm, utils
+import argparse
+import textwrap
 
 
-def main(num_epoch):
+def get_arguments():
+    parser = argparse.ArgumentParser(description=textwrap.dedent('''\
+        Script to train RNN models for the Sweat4Science data set
+        '''))
+    parser.add_argument('num_epoch', type=int,
+                        help='number of epochs to run training')
+    parser.add_argument('--model', '-m', type=str, choices=['lstm', 'gru'], default='lstm',
+                        help='RNN model to train')
+    return parser.parse_args()
+
+
+def main(arguments):
+    import numpy as np
+    from sklearn.model_selection import KFold
+    from keras.models import model_from_json
+    from keras.callbacks import CSVLogger, ReduceLROnPlateau
+
+    from sweat4science.workspace.Workspace import Workspace
+    from sweat4science.evaluation.sessionset import MF_sessionset as mfs
+    from sweat4science import s4sconfig
+
+    from s4s_rnn import models, utils
+
     workspace_folder = os.path.join(s4sconfig.workspace_dir, "session-data")
     ws = Workspace(workspace_folder)
 
@@ -44,12 +55,13 @@ def main(num_epoch):
     kf = KFold(len(sessions))
 
     for ntsteps in [5, 10, 15]:
-        model = keras_lstm.create_model(hidden_neurons, input_dim=None,
+        model = models.create_model(hidden_neurons, input_dim=None,
                                         input_shape=(ntsteps, input_dim),
                                         output_dim=output_dim)
         # Construct meaningful base name
-        base_name = "lstm_indoor_" + str(ntsteps) + "step_" + str(input_dim) + "in_" + str(hidden_neurons) + "hidden_"\
-                    + date_string + "_" + str(num_epoch) + "epoch_"
+        base_name = "%s_indoor_%02dstep_%02din_%s_%03depoch_" \
+                    % (arguments.model, ntsteps, input_dim, date_string,
+                       arguments.num_epoch)
         base_name = os.path.join("train_results", base_name)
 
         # serialize model to JSON
@@ -85,7 +97,7 @@ def main(num_epoch):
             csv_logger = CSVLogger(cross_validation_name + "training.log", append=False)
             #reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=10, min_lr=0.001)
             loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
-                             nb_epoch=num_epoch, validation_data=(test_data_x, test_data_y),
+                             nb_epoch=arguments.num_epoch, validation_data=(test_data_x, test_data_y),
                              callbacks=[csv_logger], verbose=2)
 
             # serialize weights to HDF5
@@ -97,7 +109,7 @@ def main(num_epoch):
     return
 
 if __name__ == "__main__":
-    num_epoch = int(sys.argv[1])
-    main(num_epoch)
+    arguments = get_arguments()
+    main(arguments)
     pass
 

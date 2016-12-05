@@ -55,9 +55,9 @@ def main(arguments):
     kf = KFold(len(sessions))
 
     for ntsteps in [5, 10, 15]:
-        model = models.create_model(hidden_neurons, input_dim=None,
-                                        input_shape=(ntsteps, input_dim),
-                                        output_dim=output_dim)
+        model = models.create_model('lstm', hidden_neurons, input_dim=None,
+                                    input_shape=(ntsteps, input_dim),
+                                    output_dim=output_dim)
         # Construct meaningful base name
         base_name = "%s_indoor_%s_%02dstep_%02din_%03dhidden_%03depoch_" \
                     % (arguments.model, date_string, ntsteps, input_dim,

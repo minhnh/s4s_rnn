@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
 
 
 def reshape_array_by_time_steps(input_array, time_steps=1):
@@ -57,18 +58,16 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
             np.append(data_single_array, data, axis=0)
         pass
 
-    data_mean = None
-    data_std = None
+    scaler = None
     if normalize:
-        data_mean = np.mean(data, axis=0)
-        data_std = np.std(data, axis=0)
+        scaler = MinMaxScaler(feature_range=(0, 1))
         pass
 
     data_x = None
     data_y = None
     for data in data_multiple_arrays:
         if normalize:
-            data = (data - data_mean) / data_std
+            data = scaler.fit_transform(data)
             pass
 
         data_x_, data_y_ = data[:, :-output_dim], data[:, -output_dim:]
@@ -78,12 +77,12 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         data_y = data_y_ if data_y is None else np.append(data_y, data_y_, axis=0)
         pass
     if return_norm and normalize:
-        return data_x, data_y, data_mean, data_std
+        return data_x, data_y, scaler
     else:
         return data_x, data_y
 
 
-def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std, horizon=None):
+def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     """
     Predict output using given model and
 
@@ -91,8 +90,7 @@ def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std, horizon=N
     :param weights_file: H5 file containing weights. If None will skip loading weights and compiling
     :param data_x: input data
     :param data_y: actual output data
-    :param y_mean: output mean
-    :param y_std: output standard deviation
+    :param scaler: MinMaxScaler object for unnormalizing
     :param horizon: time horizon for prediction, run full simulation if None
     :return:
     """
@@ -112,10 +110,14 @@ def evaluate_model(model, weights_file, data_x, data_y, y_mean, y_std, horizon=N
 
     # Run prediction
     prediction = model.predict(data_x)
+
     # Unnormalize and calculate error
-    data_y_unnormed = data_y * y_std + y_mean
-    prediction_unnormed = prediction * y_std + y_mean
+    padding = np.zeros((len(data_y), data_x.shape[1] - 1))
+    data_y_unnormed = scaler.inverse_transform(np.append(padding, data_y, axis=1))[:, -1]
+    prediction_unnormed = scaler.inverse_transform(np.append(padding, prediction, axis=1))[:, -1]
+
     mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
+
     return data_y_unnormed, prediction_unnormed, mse
 
 

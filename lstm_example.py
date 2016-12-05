@@ -59,9 +59,9 @@ def main(arguments):
                                         input_shape=(ntsteps, input_dim),
                                         output_dim=output_dim)
         # Construct meaningful base name
-        base_name = "%s_indoor_%02dstep_%02din_%s_%03depoch_" \
-                    % (arguments.model, ntsteps, input_dim, date_string,
-                       arguments.num_epoch)
+        base_name = "%s_indoor_%s_%02dstep_%02din_%03dhidden_%03depoch_" \
+                    % (arguments.model, date_string, ntsteps, input_dim,
+                       hidden_neurons, arguments.num_epoch)
         base_name = os.path.join("train_results", base_name)
 
         # serialize model to JSON

@@ -136,11 +136,19 @@ def plot_predictions(predictions, targets, file_name,
     :return: None
     """
     plt.figure(figsize=(10, 7))
+    ax = plt.subplot(111)
 
     line1, = plt.plot(predictions, '-or', label='Predictions')
     line2, = plt.plot(targets, '-+g', label='Actual outputs')
 
-    plt.legend(handles=[line1, line2], loc=4)
+    # Shrink current axis's height by 10% on the bottom
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0 + box.height * 0.1,
+                     box.width, box.height * 0.9])
+
+    ax.legend(handles=[line1, line2], loc='upper center',
+              bbox_to_anchor=(0.5, -0.08), fancybox=True,
+              shadow=True, ncol=2)
     plt.title(title)
     plt.ylabel(y_label)
     plt.xlabel(x_label)

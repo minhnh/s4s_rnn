@@ -121,6 +121,29 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     return data_y_unnormed, prediction_unnormed, mse
 
 
+def plot_inputs(inputs):
+    """
+    Function to plot input features, each feature in a separated subplot
+    :param inputs: input features as (num_samples, num_features) array
+    :return: None
+    """
+    num_features = inputs.shape[1]
+    feature_names = ['distance', 'velocity', 'acceleration', 'time']
+    figure, subplots = plt.subplots(num_features, sharex=True)
+    for i in range(num_features):
+        subplots[i].plot(inputs[:, i], '-or', label=feature_names[i])
+        subplots[i].set_title('Plot of normalized %s' % feature_names[i])
+        subplots[i].set_ylim([-1.1, 1.1])
+        subplots[i].grid()
+        pass
+
+    figure.subplots_adjust(hspace=0.2)
+    figure.set_size_inches((10, 10))
+    plt.setp([a.get_xticklabels() for a in figure.axes[:-1]], visible=False)
+    plt.show()
+    return
+
+
 def plot_predictions(predictions, targets, file_name,
                      title, y_label="Heart rate (hbm)", x_label="Time steps",
                      save_plot=False, show_plot=True):

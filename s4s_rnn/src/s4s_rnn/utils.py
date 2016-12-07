@@ -39,7 +39,8 @@ def reshape_array_by_time_steps(input_array, time_steps=1):
     return result
 
 
-def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True, return_norm=False):
+def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True,
+                           return_norm=False, old_norm=False):
     """
 
     :param sessions: list of sweat4science.messages.Session object
@@ -47,6 +48,7 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
     :param output_dim: dimension of output data
     :param normalize: will normalize data if True
     :param return_norm: will return normalization result if True
+    :param old_norm: normalize using old technique if True
     :return: input data, output data and normalization results if return_norm is True
     """
     data_multiple_arrays = []
@@ -61,13 +63,22 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
     scaler = None
     if normalize:
         scaler = MinMaxScaler(feature_range=(0, 1))
+        if old_norm:
+            scaler.data_mean_ = np.mean(data, axis=0)
+            scaler.data_std_ = np.std(data, axis=0)
+            pass
         pass
 
     data_x = None
     data_y = None
     for data in data_multiple_arrays:
         if normalize:
-            data = scaler.fit_transform(data)
+            if old_norm:
+                data = (data - scaler.data_mean_) / scaler.data_std_
+                pass
+            else:
+                data = scaler.fit_transform(data)
+                pass
             pass
 
         data_x_, data_y_ = data[:, :-output_dim], data[:, -output_dim:]
@@ -82,7 +93,7 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         return data_x, data_y
 
 
-def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
+def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, old_norm=False):
     """
     Predict output using given model and
 
@@ -92,6 +103,7 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     :param data_y: actual output data
     :param scaler: MinMaxScaler object for unnormalizing
     :param horizon: time horizon for prediction, run full simulation if None
+    :param old_norm: normalize using old technique if True
     :return:
     """
     # Prepare model
@@ -112,9 +124,15 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     prediction = model.predict(data_x)
 
     # Unnormalize and calculate error
-    padding = np.zeros((len(data_y), data_x.shape[1] - 1))
-    data_y_unnormed = scaler.inverse_transform(np.append(padding, data_y, axis=1))[:, -1]
-    prediction_unnormed = scaler.inverse_transform(np.append(padding, prediction, axis=1))[:, -1]
+    if old_norm:
+        data_y_unnormed = data_y * scaler.data_std_[-1] + scaler.data_mean_[-1]
+        prediction_unnormed = prediction * scaler.data_std_[-1] + scaler.data_mean_[-1]
+        pass
+    else:
+        padding = np.zeros((len(data_y), data_x.shape[2]))
+        data_y_unnormed = scaler.inverse_transform(np.append(padding, data_y, axis=1))[:, -1]
+        prediction_unnormed = scaler.inverse_transform(np.append(padding, prediction, axis=1))[:, -1]
+        pass
 
     mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
 

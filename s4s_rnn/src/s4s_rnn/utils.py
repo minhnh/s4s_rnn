@@ -151,7 +151,11 @@ def plot_inputs(inputs):
     for i in range(num_features):
         subplots[i].plot(inputs[:, i], '-or', label=feature_names[i])
         subplots[i].set_title('Plot of normalized %s' % feature_names[i])
-        subplots[i].set_ylim([-1.1, 1.1])
+        max_input = np.max(inputs[:, i])
+        min_input = np.min(inputs[:, i])
+        difference = max_input - min_input
+        subplots[i].set_ylim([min_input - 0.1*difference,
+                              max_input + 0.1*difference])
         subplots[i].grid()
         pass
 

@@ -3,6 +3,14 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 
 
+class Standardization(object):
+    def __init__(self):
+        self.data_mean = None
+        self.data_std = None
+        return
+    pass
+
+
 def reshape_array_by_time_steps(input_array, time_steps=1):
     """
     Reshape training array into 3D tensor shape (nb_samples, timesteps, input_dim)
@@ -62,11 +70,12 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
 
     scaler = None
     if normalize:
-        scaler = MinMaxScaler(feature_range=(0, 1))
         if old_norm:
-            scaler.data_mean_ = np.mean(data, axis=0)
-            scaler.data_std_ = np.std(data, axis=0)
-            pass
+            scaler = Standardization()
+            scaler.data_mean = np.mean(data, axis=0)
+            scaler.data_std = np.std(data, axis=0)
+        else:
+            scaler = MinMaxScaler(feature_range=(0, 1))
         pass
 
     data_x = None
@@ -74,7 +83,7 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
     for data in data_multiple_arrays:
         if normalize:
             if old_norm:
-                data = (data - scaler.data_mean_) / scaler.data_std_
+                data = (data - scaler.data_mean) / scaler.data_std
                 pass
             else:
                 data = scaler.fit_transform(data)
@@ -93,7 +102,26 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         return data_x, data_y
 
 
-def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, old_norm=False):
+def unnormalize(normalized_data, scaler):
+    """
+    Unnormalize data using a MinMaxScaler object
+
+    :param normalized_data:
+    :param scaler: MinMaxScaler object, should contain additional var if
+                   old_norm is true
+    :param old_norm: whether to use old normalization strategy
+    :return: None
+    """
+    if scaler.__class__.__name__ == 'Standardization':
+        return normalized_data * scaler.data_std[-1] + scaler.data_mean[-1]
+    elif scaler.__class__.__name__ == 'MinMaxScaler':
+        padding = np.zeros((len(normalized_data), len(scaler.data_range_) - 1))
+        return scaler.inverse_transform(np.append(padding, normalized_data, axis=1))[:, -1]
+    else:
+        raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
+
+
+def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     """
     Predict output using given model and
 
@@ -124,16 +152,8 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, ol
     prediction = model.predict(data_x)
 
     # Unnormalize and calculate error
-    if old_norm:
-        data_y_unnormed = data_y * scaler.data_std_[-1] + scaler.data_mean_[-1]
-        prediction_unnormed = prediction * scaler.data_std_[-1] + scaler.data_mean_[-1]
-        pass
-    else:
-        padding = np.zeros((len(data_y), data_x.shape[2]))
-        data_y_unnormed = scaler.inverse_transform(np.append(padding, data_y, axis=1))[:, -1]
-        prediction_unnormed = scaler.inverse_transform(np.append(padding, prediction, axis=1))[:, -1]
-        pass
-
+    data_y_unnormed = unnormalize(data_y, scaler)
+    prediction_unnormed = unnormalize(prediction, scaler)
     mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
 
     return data_y_unnormed, prediction_unnormed, mse

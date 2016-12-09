@@ -13,8 +13,12 @@ def get_arguments():
         '''))
     parser.add_argument('num_epoch', type=int,
                         help='number of epochs to run training')
-    parser.add_argument('--model', '-m', type=str, choices=['lstm', 'gru'], default='lstm',
+    parser.add_argument('--model', '-m', type=str,
+                        choices=['lstm', 'gru'], default='lstm',
                         help='RNN model to train')
+    parser.add_argument('--scenarios', '-s', type=str,
+                        choices=['cross_val', 'vary_num_neuron'], default='cross_val',
+                        help='training scenarios to run')
     return parser.parse_args()
 
 
@@ -55,7 +59,7 @@ def main(arguments):
     kf = KFold(len(sessions))
 
     for ntsteps in [5, 10, 15]:
-        model = models.create_model('lstm', hidden_neurons, input_dim=None,
+        model = models.create_model(arguments.model, hidden_neurons, input_dim=None,
                                     input_shape=(ntsteps, input_dim),
                                     output_dim=output_dim)
         # Construct meaningful base name

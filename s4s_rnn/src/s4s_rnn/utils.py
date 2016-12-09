@@ -121,7 +121,7 @@ def unnormalize(normalized_data, scaler):
         raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
 
 
-def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
+def evaluate_model(model, weights_file, data_x, data_y, horizon=None):
     """
     Predict output using given model and
 
@@ -129,7 +129,7 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
     :param weights_file: H5 file containing weights. If None will skip loading weights and compiling
     :param data_x: input data
     :param data_y: actual output data
-    :param scaler: MinMaxScaler object for unnormalizing
+    :param scaler: MinMaxScaler or Standardization object for unnormalizing
     :param horizon: time horizon for prediction, run full simulation if None
     :param old_norm: normalize using old technique if True
     :return:
@@ -145,18 +145,12 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None):
         model.fit(data_x[:-horizon], data_y[:-horizon], batch_size=(1),
                   nb_epoch=1, validation_split=0.0, verbose=0)
         data_x = data_x[-horizon:]
-        data_y = data_y[-horizon:]
         pass
 
     # Run prediction
     prediction = model.predict(data_x)
 
-    # Unnormalize and calculate error
-    data_y_unnormed = unnormalize(data_y, scaler)
-    prediction_unnormed = unnormalize(prediction, scaler)
-    mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
-
-    return data_y_unnormed, prediction_unnormed, mse
+    return prediction
 
 
 def plot_inputs(inputs):

@@ -1,6 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from itertools import cycle
 from sklearn.preprocessing import MinMaxScaler
+
+
+class Standardization(object):
+    def __init__(self):
+        self.data_mean = None
+        self.data_std = None
+        return
+    pass
 
 
 def reshape_array_by_time_steps(input_array, time_steps=1):
@@ -62,11 +71,12 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
 
     scaler = None
     if normalize:
-        scaler = MinMaxScaler(feature_range=(0, 1))
         if old_norm:
-            scaler.data_mean_ = np.mean(data, axis=0)
-            scaler.data_std_ = np.std(data, axis=0)
-            pass
+            scaler = Standardization()
+            scaler.data_mean = np.mean(data, axis=0)
+            scaler.data_std = np.std(data, axis=0)
+        else:
+            scaler = MinMaxScaler(feature_range=(0, 1))
         pass
 
     data_x = None
@@ -74,7 +84,7 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
     for data in data_multiple_arrays:
         if normalize:
             if old_norm:
-                data = (data - scaler.data_mean_) / scaler.data_std_
+                data = (data - scaler.data_mean) / scaler.data_std
                 pass
             else:
                 data = scaler.fit_transform(data)
@@ -93,7 +103,26 @@ def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True
         return data_x, data_y
 
 
-def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, old_norm=False):
+def unnormalize(normalized_data, scaler):
+    """
+    Unnormalize data using a MinMaxScaler object
+
+    :param normalized_data:
+    :param scaler: MinMaxScaler object, should contain additional var if
+                   old_norm is true
+    :param old_norm: whether to use old normalization strategy
+    :return: None
+    """
+    if scaler.__class__.__name__ == 'Standardization':
+        return (normalized_data * scaler.data_std[-1] + scaler.data_mean[-1]).flatten()
+    elif scaler.__class__.__name__ == 'MinMaxScaler':
+        padding = np.zeros((len(normalized_data), len(scaler.data_range_) - 1))
+        return scaler.inverse_transform(np.append(padding, normalized_data, axis=1))[:, -1]
+    else:
+        raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
+
+
+def evaluate_model(model, weights_file, data_x, data_y, horizon=None):
     """
     Predict output using given model and
 
@@ -101,7 +130,7 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, ol
     :param weights_file: H5 file containing weights. If None will skip loading weights and compiling
     :param data_x: input data
     :param data_y: actual output data
-    :param scaler: MinMaxScaler object for unnormalizing
+    :param scaler: MinMaxScaler or Standardization object for unnormalizing
     :param horizon: time horizon for prediction, run full simulation if None
     :param old_norm: normalize using old technique if True
     :return:
@@ -117,26 +146,12 @@ def evaluate_model(model, weights_file, data_x, data_y, scaler, horizon=None, ol
         model.fit(data_x[:-horizon], data_y[:-horizon], batch_size=(1),
                   nb_epoch=1, validation_split=0.0, verbose=0)
         data_x = data_x[-horizon:]
-        data_y = data_y[-horizon:]
         pass
 
     # Run prediction
     prediction = model.predict(data_x)
 
-    # Unnormalize and calculate error
-    if old_norm:
-        data_y_unnormed = data_y * scaler.data_std_[-1] + scaler.data_mean_[-1]
-        prediction_unnormed = prediction * scaler.data_std_[-1] + scaler.data_mean_[-1]
-        pass
-    else:
-        padding = np.zeros((len(data_y), data_x.shape[2]))
-        data_y_unnormed = scaler.inverse_transform(np.append(padding, data_y, axis=1))[:, -1]
-        prediction_unnormed = scaler.inverse_transform(np.append(padding, prediction, axis=1))[:, -1]
-        pass
-
-    mse = np.mean((prediction_unnormed - data_y_unnormed)**2)
-
-    return data_y_unnormed, prediction_unnormed, mse
+    return prediction
 
 
 def plot_inputs(inputs):
@@ -166,13 +181,14 @@ def plot_inputs(inputs):
     return
 
 
-def plot_predictions(predictions, targets, file_name,
+def plot_predictions(predictions, prediction_names, targets, file_name,
                      title, y_label="Heart rate (hbm)", x_label="Time steps",
                      save_plot=False, show_plot=True):
     """
     Visualise comparison between prediction and actual data
 
-    :param predictions: predicted outputs
+    :param predictions: list of predicted outputs
+    :param prediction_names: names of predictions for plot labels
     :param targets: actual outputs
     :param file_name: name of image file for saving plot
     :param title:
@@ -182,18 +198,30 @@ def plot_predictions(predictions, targets, file_name,
     :param show_plot: if True will show plot
     :return: None
     """
+    if len(predictions) != len(prediction_names):
+        print("Lengths of prediction list and prediction names must equal")
+        return
+
     plt.figure(figsize=(10, 7))
     ax = plt.subplot(111)
 
-    line1, = plt.plot(predictions, '-or', label='Predictions')
-    line2, = plt.plot(targets, '-+g', label='Actual outputs')
+    colors = cycle('rbgcmykw')
+    lines = []
+    line_actual, = plt.plot(targets, '-o', c=next(colors), markersize=4,
+                            label='True output')
+    lines.append(line_actual)
+    for index, prediction in enumerate(predictions):
+        line_predict, = plt.plot(prediction, '-+', c=next(colors), markersize=4,
+                                 label=prediction_names[index])
+        lines.append(line_predict)
+        pass
 
     # Shrink current axis's height by 10% on the bottom
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1,
                      box.width, box.height * 0.9])
 
-    ax.legend(handles=[line1, line2], loc='upper center',
+    ax.legend(handles=lines, loc='upper center',
               bbox_to_anchor=(0.5, -0.08), fancybox=True,
               shadow=True, ncol=2)
     plt.title(title)

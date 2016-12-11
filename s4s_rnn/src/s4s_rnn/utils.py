@@ -181,15 +181,14 @@ def plot_inputs(inputs):
     return
 
 
-def plot_predictions(predictions, prediction_names, targets, file_name,
-                     title, y_label="Heart rate (hbm)", x_label="Time steps",
-                     save_plot=False, show_plot=True):
+def plot_predictions(predictions, prediction_names, true_output, title, file_name=None,
+                     y_label="Heart rate (hbm)", x_label="Time steps", show_plot=True):
     """
     Visualise comparison between prediction and actual data
 
     :param predictions: list of predicted outputs
     :param prediction_names: names of predictions for plot labels
-    :param targets: actual outputs
+    :param true_output: actual outputs
     :param file_name: name of image file for saving plot
     :param title:
     :param y_label:
@@ -202,16 +201,20 @@ def plot_predictions(predictions, prediction_names, targets, file_name,
         print("Lengths of prediction list and prediction names must equal")
         return
 
+    max_len = max(map(lambda pred : len(pred), predictions))
+    x = list(range(max_len))
+
     plt.figure(figsize=(10, 7))
     ax = plt.subplot(111)
 
     colors = cycle('rbgcmykw')
     lines = []
-    line_actual, = plt.plot(targets, '-o', c=next(colors), markersize=4,
+    line_actual, = plt.plot(x, true_output[-max_len:], '-o', c=next(colors), markersize=4,
                             label='True output')
     lines.append(line_actual)
     for index, prediction in enumerate(predictions):
-        line_predict, = plt.plot(prediction, '-+', c=next(colors), markersize=4,
+        line_predict, = plt.plot(x[-len(prediction):], prediction, '-+',
+                                 c=next(colors), markersize=4,
                                  label=prediction_names[index])
         lines.append(line_predict)
         pass
@@ -229,7 +232,7 @@ def plot_predictions(predictions, prediction_names, targets, file_name,
     plt.xlabel(x_label)
     plt.grid()
 
-    if save_plot and type(file_name).__name__ == 'str':
+    if type(file_name).__name__ == 'str':
         plt.savefig(file_name)
         pass
 

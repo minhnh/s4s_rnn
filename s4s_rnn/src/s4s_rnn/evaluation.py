@@ -67,4 +67,16 @@ class ExperimentEvalutation(object):
                                   - self.true_output[-len(prediction):])**2)
         return
 
+    def plot_predictions(self, prediction_names, plot_tiltle, file_name=None):
+        for name in prediction_names:
+            if name not in self.predictions:
+                print("plot_predictions: unknown experiement name - %s" % name)
+                pass
+            pass
+
+        predictions = list(map(self.predictions.get, prediction_names))
+        utils.plot_predictions(predictions, prediction_names, self.true_output,
+                               plot_tiltle, file_name=file_name)
+        return
+
     pass

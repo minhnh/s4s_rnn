@@ -7,6 +7,13 @@ import argparse
 import textwrap
 
 
+_LOOKBACKS = [5, 10, 15]
+_NEURON_NUMS = list(range(10, 100, 10))
+_INPUT_DIM = 4
+_OUTPUT_DIM = 1
+_DEFAULT_LOOKBACK = 10
+
+
 def get_arguments():
     parser = argparse.ArgumentParser(description=textwrap.dedent('''\
         Script to train RNN models for the Sweat4Science data set
@@ -16,15 +23,16 @@ def get_arguments():
     parser.add_argument('--model', '-m', type=str,
                         choices=['lstm', 'gru'], default='lstm',
                         help='RNN model to train')
-    parser.add_argument('--scenarios', '-s', type=str,
-                        choices=['cross_val', 'vary_hidden'],
-                        default='cross_val',
+    parser.add_argument('--scenario', '-s', type=str,
+                        choices=['vary_time', 'vary_neuron'],
+                        default='vary_time',
                         help='training scenarios to run')
+    parser.add_argument('--num_neurons', '-n', type=int, default=400,
+                        help='number of hidden neurons in the perceptron layer')
     return parser.parse_args()
 
 
-def train_cross_validation(sessions, model, num_hidden, num_tsteps,
-                           input_dim, output_dim, date_string):
+def train_cross_validation(sessions, model, num_hidden, num_tsteps, date_string):
     from sklearn.model_selection import KFold
     from keras.models import model_from_json
     from keras.callbacks import CSVLogger
@@ -32,32 +40,29 @@ def train_cross_validation(sessions, model, num_hidden, num_tsteps,
     from s4s_rnn import models, utils
 
     model = models.create_model(model, num_hidden, input_dim=None,
-                                input_shape=(num_tsteps, input_dim),
-                                output_dim=output_dim)
+                                input_shape=(num_tsteps, _INPUT_DIM),
+                                output_dim=_OUTPUT_DIM)
     # Construct meaningful base name
-    base_name = "%s_indoor_%s_%02dstep_%02din_%03dhidden_%03depoch_" \
-                % (arguments.model, date_string, num_tsteps, input_dim,
+    base_name = "%s_indoor_%s_%02dstep_%02din_%03dhidden_%03depoch" \
+                % (arguments.model, date_string, num_tsteps, _INPUT_DIM,
                    num_hidden, arguments.num_epoch)
+    # print("Base file name: %s" % (base_name))
     base_name = os.path.join("train_results", base_name)
 
     # serialize model to JSON
     model_json = model.to_json()
-    model_file_name = base_name + "model.json"
+    model_file_name = base_name + "_model.json"
     with open(model_file_name, "w") as json_file:
         json_file.write(model_json)
         pass
 
-    print("\n----------------------------------------------------\n")
-    print("Base file name: %s" % (base_name))
-    print("Looking back %d time steps\n" % (num_tsteps))
-
     kf = KFold(len(sessions))
     for train_index, test_index in kf.split(sessions):
-        print("\n--------------------------\n")
+        print("\n--------------------------")
         train_sessions = sessions[train_index]
         test_sessions = sessions[test_index]
         print("Training on:\n" + "\n".join(map(str, train_sessions)))
-        print("\nTesting on:\n" + "\n".join(map(str, test_sessions)))
+        print("Testing on:\n" + "\n".join(map(str, test_sessions)))
 
         print("\nLoading model from: " + model_file_name)
         json_file = open(model_file_name, 'r')
@@ -68,19 +73,18 @@ def train_cross_validation(sessions, model, num_hidden, num_tsteps,
 
         match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
         # put name of evaluation set in saved filenames
-        cross_validation_name = base_name + match.groups()[0] + "_" + match.groups()[1] + "_"
+        cross_validation_name = "%s_%s_%s" % (base_name, match.groups()[0], match.groups()[1])
 
         train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions, num_tsteps)
         test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, num_tsteps)
 
-        csv_logger = CSVLogger(cross_validation_name + "training.log", append=False)
-        # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=10, min_lr=0.001)
+        csv_logger = CSVLogger(cross_validation_name + "_training.log", append=False)
         loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
                          nb_epoch=arguments.num_epoch, validation_data=(test_data_x, test_data_y),
                          callbacks=[csv_logger], verbose=2)
 
         # serialize weights to HDF5
-        loaded_model.save_weights(cross_validation_name + "weights.h5")
+        loaded_model.save_weights(cross_validation_name + "_weights.h5")
         print("Saved model to disk")
 
         pass
@@ -110,15 +114,36 @@ def main(arguments):
     print("Using sessions: ")
     print("\n".join(map(str, sessions)))
 
-    print("\nconstructing LSTM model...")
-    input_dim = 4
-    output_dim = 1
-    hidden_neurons = 400
+    print("\nconstructing %s model..." % str.upper(arguments.model))
     date_string = time.strftime("%Y%m%d")
+    print("----------------------------------------------------\n"
+          "Model: %s\n")
+    if arguments.scenario == 'vary_time':
+        print("Number of hidden neurons: %d\n"
+              "Lookback: %s time steps\n"
+              "----------------------------------------------------\n"
+              % (arguments.num_neurons, str(_LOOKBACKS)))
+        for lookback in _LOOKBACKS:
+            print("\n------------------------------------------")
+            print("Looking back %d time steps\n" % (lookback))
 
-    for ntsteps in [5, 10, 15]:
-        train_cross_validation(sessions, arguments.model, hidden_neurons, ntsteps,
-                           input_dim, output_dim, date_string)
+            train_cross_validation(sessions, arguments.model, arguments.num_neurons,
+                                   lookback, date_string)
+            pass
+    elif arguments.scenario == 'vary_neuron':
+        print("Number of hidden neurons: %s\n"
+              "Lookback: %d time steps\n"
+              "----------------------------------------------------\n"
+              % (str(_NEURON_NUMS), _DEFAULT_LOOKBACK))
+        for num_neuron in _NEURON_NUMS:
+            print("\n------------------------------------------")
+            print("Trainning with %d neurons\n" % (num_neuron))
+
+            train_cross_validation(sessions, arguments.model, num_neuron,
+                                   _DEFAULT_LOOKBACK, date_string)
+            pass
+    else:
+        print("Unsupported scenario: %s" % arguments.scenario)
         pass
     return
 

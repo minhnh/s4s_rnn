@@ -87,12 +87,12 @@ class ExperimentEvalutation(object):
 class ExperimentEvalutationDict(dict):
 
     def __init__(self, evaluations=None):
+        self.model_json = {}
         if evaluations is None:
             super().__init__()
             return
 
         super().__init__(evaluations)
-        self.model_json = {}
         for key, value in iter(evaluations):
             if value.__class__.__name__ != ExperimentEvalutation.__name__:
                 raise ValueError("%s: Expected %s, got: %s" % (self.__class__.__name__,
@@ -136,14 +136,45 @@ class ExperimentEvalutationDict(dict):
                 and not update:
             return
 
-        json_file = open(model_file_name, 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
+        try:
+            json_file = open(model_file_name, 'r')
+        except IOError as e:
+            print("%s: IOError caught when opening %s:\n%s" % (self.__class__.__name__, base_name, e))
+            return
+        else:
+            loaded_model_json = json_file.read()
+            json_file.close()
+            pass
 
         self.model_json[prediction_name] = loaded_model_json
         return
 
-    def add_experiment_from_file(self, file_name):
+    def add_experiment_from_weight_file(self, weight_file_name):
+        base_name = os.path.basename(weight_file_name)
+        match = re.match('((gru|lstm)_\w+_(\d{8})_(\d{2})step_(\d{2})in_(\d{3})hidden_(\d{3})epoch)_(\S+)_weights.h5',
+                         base_name)
+        if match is None:
+            print("%s: Invalid weight file name: %s" % (self.__class__.__name__, base_name))
+            return
+
+        model_type = match.group(2)
+        date_string = match.group(3)
+        num_tstep = match.group(4)
+        num_input = match.group(5)
+        num_neuron = match.group(6)
+        num_epoch = match.group(7)
+        session_name = match.group(8)
+        # print("%s_%s_%s_%s_%s_%s_%s" % (model_type, date_string, num_tstep, num_input, num_neuron, num_epoch, session_name))
+        prediction_name = "%s_lookback%s_%sneurons" % (model_type, num_tstep, num_neuron)
+        if prediction_name not in self.model_json or self.model_json[prediction_name] is None:
+            model_file_name = os.path.join(os.path.dirname(weight_file_name), match.group(1) + "_model.json")
+            self.add_model_json(model_file_name)
+            pass
+
+        if session_name not in self:
+            self[session_name] = None
+            pass
+
         return
 
     pass

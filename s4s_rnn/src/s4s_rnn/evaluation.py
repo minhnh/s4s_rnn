@@ -3,6 +3,7 @@ import re
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 
+from sweat4science.messages import Session
 from s4s_rnn import utils
 
 
@@ -11,27 +12,27 @@ _STANDARD = utils.Standardization.__name__
 
 
 class ExperimentEvalutation(object):
-    def __init__(self, exp_name, scaler, true_output, unnormalize=True):
-        self.experiment_name = exp_name
-
-        self._scalers = {}
-        if scaler is not None:
-            self._scalers[scaler.__class__.__name__] = scaler
-            pass
-
-        if unnormalize:
-            self.true_output = utils.unnormalize(true_output, scaler)
-        else:
-            self.true_output = true_output
-            pass
+    def __init__(self, session):
+        self.session = session
         self.predictions = {}
         self.mse = {}
+        self._scalers = {}
+
+        data_x, data_y = utils.get_data_from_sessions([session], num_timesteps=None, output_dim=1,
+                                                      normalize=False, return_norm=False, old_norm=False)
+        scaler_min_max = utils.get_scaler(np.append(data_x, data_y, axis=1), old_norm=False)
+        scaler_standardization = utils.get_scaler(np.append(data_x, data_y, axis=1), old_norm=True)
+        self.add_scaler(scaler_min_max)
+        self.add_scaler(scaler_standardization)
+
+        self.true_output = data_y
         pass
 
     def add_scaler(self, new_scaler):
-        if new_scaler is None:
-            raise ValueError("add_scaler: New scaler cannot be None")
-
+        """
+        :param new_scaler:
+        :return: None
+        """
         scaler_key = new_scaler.__class__.__name__
         if scaler_key in self._scalers:
             print("add_scaler: scaler %s already recorded" % scaler_key)
@@ -40,6 +41,13 @@ class ExperimentEvalutation(object):
         return
 
     def update_true_output(self, true_outputs, unnormalize=True, old_norm=False):
+        """
+
+        :param true_outputs:
+        :param unnormalize:
+        :param old_norm:
+        :return:
+        """
         if unnormalize:
             scaler_key = _STANDARD if old_norm else _MINMAX
             if scaler_key not in self._scalers:
@@ -51,6 +59,14 @@ class ExperimentEvalutation(object):
         return
 
     def add_prediction(self, name, prediction, unnormalize=True, old_norm=False):
+        """
+
+        :param name:
+        :param prediction:
+        :param unnormalize:
+        :param old_norm:
+        :return:
+        """
         scaler_key = _STANDARD if old_norm else _MINMAX
         if scaler_key not in self._scalers:
             print('add_prediction: %s scaler is not initialized' % scaler_key)
@@ -70,6 +86,13 @@ class ExperimentEvalutation(object):
         return
 
     def plot_predictions(self, prediction_names, plot_tiltle, file_name=None):
+        """
+
+        :param prediction_names:
+        :param plot_tiltle:
+        :param file_name:
+        :return:
+        """
         for name in prediction_names:
             if name not in self.predictions:
                 print("plot_predictions: unknown experiement name - %s" % name)
@@ -85,42 +108,55 @@ class ExperimentEvalutation(object):
 
 
 class ExperimentEvalutationDict(dict):
-
-    def __init__(self, evaluations=None):
+    """
+    Class to store ExperimentEvalutation objects as dictionary
+    """
+    def __init__(self, sessions=None):
+        super().__init__()
         self.model_json = {}
-        if evaluations is None:
-            super().__init__()
+        self.sessions = {}
+        if sessions is None:
             return
 
-        super().__init__(evaluations)
-        for key, value in iter(evaluations):
-            if value.__class__.__name__ != ExperimentEvalutation.__name__:
-                raise ValueError("%s: Expected %s, got: %s" % (self.__class__.__name__,
-                                                               ExperimentEvalutation.__name__,
-                                                               value.__class__.__name__))
+        for session in iter(sessions):
+            if session.__class__.__name__ != 'Session':
+                raise ValueError("%s: expected list of %s, got list of %s" % (ExperimentEvalutationDict.__name__, 'Session',
+                                                                              Session.__name__))
                 pass
 
-            if key != value.experiment_name:
-                raise ValueError("%s: key %s does not match name %s"
-                                 % (self.__class__.__name__, key, value.experiment_name))
-                pass
+            self.add_session(session)
 
-            self.update_experiment(value)
+            self.update_experiment(session)
 
             pass
         return
+
+    def add_session(self, session):
+        self[self.get_session_key(session.name)] = ExperimentEvalutation(session=session)
+        return
+
+    def get_session_key(self, session_name):
+        match = re.match('.+/running_indoor_(.+)/(\d+)', session_name)
+        return "%s_%s" % (match.groups()[0], match.groups()[1])
+
+    def get_prediction_name(self, model_name, num_tstep, num_neuron, old_norm):
+        prediction_name = "%s_lookback%s_%sneurons" % (model_name, num_tstep, num_neuron)
+        if old_norm:
+            prediction_name += "_oldnorm"
+            pass
+        return prediction_name
 
     def update_experiment(self, exp_eval):
         #TODO: check prediction_name in self.model_json
         return
 
-    def add_model_json(self, model_file_name, update=False):
-        base_name = os.path.basename(model_file_name)
+    def add_model_json(self, model_file_path, update=False, old_norm=False):
+        base_name = os.path.basename(model_file_path)
         match = re.match('(gru|lstm)_\w+_(\d{8})_(\d{2})step_(\d{2})in_(\d{3})hidden_(\d{3})epoch_model.json',
                          base_name)
         if match is None:
-            print("%s: Invalid model file name: %s" % (self.__class__.__name__, base_name))
-            return
+            print("%s: Invalid model file name: %s" % (ExperimentEvalutationDict.__name__, base_name))
+            return False
 
         model_type = match.group(1)
         date_string = match.group(2)
@@ -129,32 +165,32 @@ class ExperimentEvalutationDict(dict):
         num_neuron = match.group(5)
         num_epoch = match.group(6)
         # print("%s_%s_%s_%s_%s_%s" % (model_type, date_string, num_tstep, num_input, num_neuron, num_epoch))
-        prediction_name = "%s_lookback%s_%sneurons" % (model_type, num_tstep, num_neuron)
+        prediction_name = self.get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
 
         if prediction_name in self.model_json\
                 and self.model_json[prediction_name] is not None\
                 and not update:
-            return
+            return False
 
         try:
-            json_file = open(model_file_name, 'r')
+            json_file = open(model_file_path, 'r')
         except IOError as e:
-            print("%s: IOError caught when opening %s:\n%s" % (self.__class__.__name__, base_name, e))
-            return
+            print("%s: IOError caught when opening %s:\n%s" % (ExperimentEvalutationDict.__name__, base_name, e))
+            return False
         else:
             loaded_model_json = json_file.read()
             json_file.close()
             pass
 
         self.model_json[prediction_name] = loaded_model_json
-        return
+        return True
 
-    def add_experiment_from_weight_file(self, weight_file_name):
+    def add_prediction_from_weight_file(self, weight_file_name, old_norm=False):
         base_name = os.path.basename(weight_file_name)
         match = re.match('((gru|lstm)_\w+_(\d{8})_(\d{2})step_(\d{2})in_(\d{3})hidden_(\d{3})epoch)_(\S+)_weights.h5',
                          base_name)
         if match is None:
-            print("%s: Invalid weight file name: %s" % (self.__class__.__name__, base_name))
+            print("%s: Invalid weight file name: %s" % (ExperimentEvalutationDict.__name__, base_name))
             return
 
         model_type = match.group(2)
@@ -165,14 +201,18 @@ class ExperimentEvalutationDict(dict):
         num_epoch = match.group(7)
         session_name = match.group(8)
         # print("%s_%s_%s_%s_%s_%s_%s" % (model_type, date_string, num_tstep, num_input, num_neuron, num_epoch, session_name))
-        prediction_name = "%s_lookback%s_%sneurons" % (model_type, num_tstep, num_neuron)
-        if prediction_name not in self.model_json or self.model_json[prediction_name] is None:
-            model_file_name = os.path.join(os.path.dirname(weight_file_name), match.group(1) + "_model.json")
-            self.add_model_json(model_file_name)
-            pass
-
         if session_name not in self:
-            self[session_name] = None
+            print("%s: session %s not added" % (ExperimentEvalutationDict.__name__, session_name))
+            return
+
+        prediction_name = self.get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
+        if prediction_name not in self.model_json or self.model_json[prediction_name] is None:
+            dir_name = os.path.dirname(weight_file_name)
+            model_file_name = os.path.join(dir_name, match.group(1) + "_model.json")
+            print("%s: model for %s not recorded, looking for %s in %s" % (ExperimentEvalutationDict.__name__,
+                                                                           model_file_name, prediction_name, dir_name))
+            if self.add_model_json(model_file_name):
+                pass
             pass
 
         return

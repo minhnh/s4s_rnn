@@ -36,7 +36,7 @@ def reshape_array_by_time_steps(input_array, time_steps=1):
 
     result = None
     for i in range(1, time_steps):
-        padding = np.repeat ([input_array[:1, :]], time_steps - i, axis=1)
+        padding = np.repeat([input_array[:1, :]], time_steps - i, axis=1)
         sample = np.append(padding, [input_array[:i, :]], axis=1)
         result = sample if result is None else np.append(result, sample, axis=0)
         pass
@@ -46,61 +46,6 @@ def reshape_array_by_time_steps(input_array, time_steps=1):
         pass
 
     return result
-
-
-def get_data_from_sessions(sessions, num_timesteps, output_dim=1, normalize=True,
-                           return_norm=False, old_norm=False):
-    """
-
-    :param sessions: list of sweat4science.messages.Session object
-    :param num_timesteps: number of lookback time steps, second dimension of Tensorflow shape
-    :param output_dim: dimension of output data
-    :param normalize: will normalize data if True
-    :param return_norm: will return normalization result if True
-    :param old_norm: normalize using old technique if True
-    :return: input data, output data and normalization results if return_norm is True
-    """
-    data_multiple_arrays = []
-    data_single_array = None
-    for s in sessions:
-        data = np.array([s.distance, s.velocity, s.acceleration, s.time, s.hbm], ndmin=2).T
-        data_multiple_arrays.append(data)
-        data_single_array = data if data_single_array is None else \
-            np.append(data_single_array, data, axis=0)
-        pass
-
-    scaler = None
-    if normalize:
-        if old_norm:
-            scaler = Standardization()
-            scaler.data_mean = np.mean(data, axis=0)
-            scaler.data_std = np.std(data, axis=0)
-        else:
-            scaler = MinMaxScaler(feature_range=(0, 1))
-        pass
-
-    data_x = None
-    data_y = None
-    for data in data_multiple_arrays:
-        if normalize:
-            if old_norm:
-                data = (data - scaler.data_mean) / scaler.data_std
-                pass
-            else:
-                data = scaler.fit_transform(data)
-                pass
-            pass
-
-        data_x_, data_y_ = data[:, :-output_dim], data[:, -output_dim:]
-        data_x_ = reshape_array_by_time_steps(data_x_, time_steps=num_timesteps)
-
-        data_x = data_x_ if data_x is None else np.append(data_x, data_x_, axis=0)
-        data_y = data_y_ if data_y is None else np.append(data_y, data_y_, axis=0)
-        pass
-    if return_norm and normalize:
-        return data_x, data_y, scaler
-    else:
-        return data_x, data_y
 
 
 def unnormalize(normalized_data, scaler):
@@ -120,6 +65,88 @@ def unnormalize(normalized_data, scaler):
         return scaler.inverse_transform(np.append(padding, normalized_data, axis=1))[:, -1]
     else:
         raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
+
+
+def normalize_with_scaler(data, scaler):
+    """
+
+    :param data:
+    :param scaler:
+    :return:
+    """
+    if scaler.__class__.__name__ == 'Standardization':
+        return (data - scaler.data_mean) / scaler.data_std
+    elif scaler.__class__.__name__ == 'MinMaxScaler':
+        return scaler.transform(data)
+    else:
+        raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
+
+
+def get_scaler(data, old_norm):
+    """
+    :param data:
+    :param old_norm: if true use standardization
+    :return: normalization scaler
+    """
+    if old_norm:
+        scaler = Standardization()
+        scaler.data_mean = np.mean(data, axis=0)
+        scaler.data_std = np.std(data, axis=0)
+    else:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaler.fit_transform(data)
+        pass
+    return scaler
+
+
+def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize=True,
+                           return_norm=False, old_norm=False):
+    """
+    Get data array from lists of sweat4science.messages.Session objects
+
+    :param sessions: list of sweat4science.messages.Session object
+    :param num_timesteps: number of lookback time steps, second dimension of Tensorflow shape,
+                          if None will not call reshape_array_by_time_steps
+    :param output_dim: dimension of output data
+    :param normalize: will normalize data if True
+    :param return_norm: will return normalization result if True
+    :param old_norm: normalize using old technique if True
+    :return: input data, output data and normalization results if return_norm is True
+    """
+    data_multiple_arrays = []
+    data_single_array = None
+    for s in sessions:
+        data = np.array([s.distance, s.velocity, s.acceleration, s.time, s.hbm], ndmin=2).T
+        data_multiple_arrays.append(data)
+        data_single_array = data if data_single_array is None else \
+            np.append(data_single_array, data, axis=0)
+        pass
+
+    scaler = None
+    if normalize:
+        scaler = get_scaler(data_single_array, old_norm=old_norm)
+        pass
+
+    data_x = None
+    data_y = None
+    for data in data_multiple_arrays:
+        if normalize:
+            data = normalize_with_scaler(data, scaler)
+            pass
+
+        data_x_, data_y_ = data[:, :-output_dim], data[:, -output_dim:]
+        if num_timesteps is not None:
+            data_x_ = reshape_array_by_time_steps(data_x_, time_steps=num_timesteps)
+            pass
+
+        data_x = data_x_ if data_x is None else np.append(data_x, data_x_, axis=0)
+        data_y = data_y_ if data_y is None else np.append(data_y, data_y_, axis=0)
+        pass
+
+    if return_norm and normalize:
+        return data_x, data_y, scaler
+    else:
+        return data_x, data_y
 
 
 def evaluate_model(model, weights_file, data_x, data_y, horizon=None):

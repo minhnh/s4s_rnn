@@ -11,6 +11,45 @@ _MINMAX = MinMaxScaler.__name__
 _STANDARD = utils.Standardization.__name__
 
 
+def get_session_key(session_name):
+    match = re.match('.+/running_indoor_(.+)/(\d+)', session_name)
+    return "%s_%s" % (match.groups()[0], match.groups()[1])
+
+
+def get_prediction_name(model_name, num_tstep, num_neuron, old_norm):
+    prediction_name = "%s_lookback%s_%sneurons" % (model_name, num_tstep, num_neuron)
+    if old_norm:
+        prediction_name += "_oldnorm"
+        pass
+    return prediction_name
+
+
+def parse_prediction_key(prediction_key):
+    """
+    :param prediction_key:
+    :return:
+    """
+    match = re.match('(?:lstm|gru)_lookback(\d+)_\d+neurons(.*)', prediction_key)
+    if match is None:
+        return None, None, None
+
+    num_tsteps = int(match.group(1))
+
+    old_norm = False
+    time_horizon = None
+    if len(match.group(2)) != 0:
+        match2 = re.match('(_oldnorm)?(_(\d+)horizon)?',  match.group(2))
+        if match2.group(1) is not None:
+            old_norm = True
+            pass
+        if match2.group(3) is not None:
+            time_horizon = int(match2.group(3))
+            pass
+        pass
+
+    return num_tsteps, old_norm, time_horizon
+
+
 class ExperimentEvalutation(object):
     def __init__(self, session):
         self.session = session
@@ -61,7 +100,7 @@ class ExperimentEvalutation(object):
             self._true_output = true_outputs
         return
 
-    def add_prediction(self, name, prediction, unnormalize=True, old_norm=False):
+    def _add_prediction(self, name, prediction, old_norm, unnormalize=True):
         """
 
         :param name:
@@ -75,10 +114,6 @@ class ExperimentEvalutation(object):
             print('add_prediction: %s scaler is not initialized' % scaler_key)
             return
 
-        if name in self.predictions:
-            print("add_prediction: %s already in predictions" % name)
-            return
-
         if unnormalize:
             self.predictions[name] = utils.unnormalize(prediction, self._scalers[scaler_key])
         else:
@@ -88,24 +123,35 @@ class ExperimentEvalutation(object):
         self.mse[name] = np.mean((self.predictions[name] - self._true_output[-len(prediction):])**2)
         return
 
-    def evaluate(self, model_json, prediction_name, weight_file=None, time_horizon=None):
-        match = re.match('(?:lstm|gru)_lookback(\d+)_\d+neurons(.*)', prediction_name)
-        if match is None:
-            print("%s evaluate: invalid prediction_name %s" % (ExperimentEvalutation.__name__, prediction_name))
+    def evaluate(self, model_json, prediction_key, weight_file=None):
+        """
+        Evaluate model and add prediction to self.predictions
+        :param model_json:
+        :param prediction_key:
+        :param weight_file:
+        :param time_horizon:
+        :return: None
+        """
+        num_tsteps, old_norm, time_horizon = parse_prediction_key(prediction_key)
+        if num_tsteps is None:
+            print("%s evaluate: invalid prediction_name %s" % (ExperimentEvalutation.__name__, prediction_key))
             return
-        if len(match.group(2)) == 0:
-            old_norm = False
-        else:
-            old_norm = True
-            pass
-        num_tsteps = int(match.group(1))
 
-        if prediction_name not in self.weight_files:
+        if prediction_key not in self.weight_files:
             if weight_file is None:
-                print("No weight file associated with key %s" % (prediction_name))
+                print("No weight file associated with key %s" % (prediction_key))
                 return
-            self.weight_files[prediction_name] = weight_file
+            self.weight_files[prediction_key] = weight_file
             pass
+
+        if time_horizon is None:
+            prediction_key_horizon = prediction_key
+        else:
+            prediction_key_horizon = prediction_key + ("_%dhorizon" % time_horizon)
+            pass
+        if prediction_key_horizon in self.predictions:
+            print("evaluate: %s already in predictions" % prediction_key_horizon)
+            return
 
         from keras.models import model_from_json
         model = model_from_json(model_json)
@@ -114,22 +160,15 @@ class ExperimentEvalutation(object):
         data_x = utils.reshape_array_by_time_steps(self._x_normed[scaler_key], time_steps=num_tsteps)
         data_y = utils.normalize_with_scaler(self._true_output, self._scalers[scaler_key])
 
-        prediction = utils.evaluate_model(model, self.weight_files[prediction_name],
+        prediction = utils.evaluate_model(model, self.weight_files[prediction_key],
                                           data_x, data_y, horizon=time_horizon)
 
-        if time_horizon is None:
-            prediction_key = prediction_name
-        else:
-            prediction_key = prediction_name + ("_%dhorizon" % time_horizon)
-            pass
-
-        self.add_prediction(prediction_key, prediction)
+        self._add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
 
         return
 
     def plot_predictions(self, prediction_names, plot_tiltle, file_name=None):
         """
-
         :param prediction_names:
         :param plot_tiltle:
         :param file_name:
@@ -157,6 +196,7 @@ class ExperimentEvalutationDict(dict):
         super().__init__()
         self.model_json = {}
         self.sessions = {}
+        self.mse = {}
         if sessions is None:
             return
 
@@ -174,25 +214,21 @@ class ExperimentEvalutationDict(dict):
         return
 
     def add_session(self, session):
-        self[self.get_session_key(session.name)] = ExperimentEvalutation(session=session)
+        self[get_session_key(session.name)] = ExperimentEvalutation(session=session)
         return
-
-    def get_session_key(self, session_name):
-        match = re.match('.+/running_indoor_(.+)/(\d+)', session_name)
-        return "%s_%s" % (match.groups()[0], match.groups()[1])
-
-    def get_prediction_name(self, model_name, num_tstep, num_neuron, old_norm):
-        prediction_name = "%s_lookback%s_%sneurons" % (model_name, num_tstep, num_neuron)
-        if old_norm:
-            prediction_name += "_oldnorm"
-            pass
-        return prediction_name
 
     def update_experiment(self, exp_eval):
         #TODO: check prediction_name in self.model_json
         return
 
     def add_model_json(self, model_file_path, update=False, old_norm=False):
+        """
+        Add a valid model JSON to the model_json dictionary
+        :param model_file_path: path to JSON file
+        :param update: if true rewrite model_json
+        :param old_norm: if True use standardization
+        :return: None
+        """
         base_name = os.path.basename(model_file_path)
         match = re.match('(gru|lstm)_\w+_(\d{8})_(\d{2})step_(\d{2})in_(\d{3})hidden_(\d{3})epoch_model.json',
                          base_name)
@@ -207,11 +243,13 @@ class ExperimentEvalutationDict(dict):
         num_neuron = match.group(5)
         num_epoch = match.group(6)
         # print("%s_%s_%s_%s_%s_%s" % (model_type, date_string, num_tstep, num_input, num_neuron, num_epoch))
-        prediction_name = self.get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
+        prediction_name = get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
 
         if prediction_name in self.model_json\
                 and self.model_json[prediction_name] is not None\
                 and not update:
+            print("%s: not updating model_json entry %s with content from %s" % (
+                ExperimentEvalutationDict.__name__, prediction_name, model_file_path))
             return False
 
         try:
@@ -228,6 +266,12 @@ class ExperimentEvalutationDict(dict):
         return True
 
     def add_weight_file(self, weight_file_name, old_norm=False):
+        """
+        Add a valid weight file to load when evaluating an ExperimentEvalutation object
+        :param weight_file_name: name of keras weight file to be added
+        :param old_norm: if True use old normalization
+        :return: None
+        """
         base_name = os.path.basename(weight_file_name)
         if not os.path.exists(weight_file_name):
             print("%s: file doesn't exist: %s" % (ExperimentEvalutationDict.__name__, weight_file_name))
@@ -251,19 +295,54 @@ class ExperimentEvalutationDict(dict):
             print("%s: session %s not added" % (ExperimentEvalutationDict.__name__, session_name))
             return
 
-        prediction_name = self.get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
+        prediction_name = get_prediction_name(model_type, num_tstep, num_neuron, old_norm)
         if prediction_name not in self.model_json or self.model_json[prediction_name] is None:
             dir_name = os.path.dirname(weight_file_name)
             model_file_name = os.path.join(dir_name, match.group(1) + "_model.json")
             print("%s: model for %s not recorded, looking for %s in %s" % (ExperimentEvalutationDict.__name__,
-                                                                           model_file_name, prediction_name, dir_name))
-            if not self.add_model_json(model_file_name):
+                                                                           prediction_name, model_file_name, dir_name))
+            if not self.add_model_json(model_file_name, old_norm=old_norm):
                 print("%s: can't add model JSON from %s" % (ExperimentEvalutationDict.__name__, model_file_name))
                 return
             pass
 
         self[session_name].weight_files[prediction_name] = weight_file_name
 
+        return
+
+    def evaluate(self, prediction_list=None, time_horizon=None):
+        if prediction_list is None:
+            prediction_list = self.model_json.keys()
+            pass
+
+        for prediction_name in prediction_list:
+            print("Evaluating %s" % prediction_name)
+            if prediction_name not in self.model_json:
+                print("%s evaluate: unrecognized prediction %s" % (ExperimentEvalutationDict.__name__, prediction_name))
+                continue
+                pass
+
+            if time_horizon is not None:
+                prediction_key = prediction_name + ("_%dhorizon" % time_horizon)
+            else:
+                prediction_key = prediction_name
+
+            predictions = None
+            true_outputs = None
+            for session_key in self:
+                self[session_key].evaluate(self.model_json[prediction_name],
+                                           prediction_key=prediction_key)
+                predictions = self[session_key].predictions[prediction_key] if predictions is None \
+                    else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
+                true_outputs = self[session_key]._true_output if true_outputs is None \
+                    else np.append(true_outputs, self[session_key]._true_output, axis=0)
+                pass
+
+            self.mse[prediction_key] = np.mean((predictions - true_outputs)**2)
+            print("   MSE: %f" % self.mse[prediction_key])
+            print("  RMSE: %f" % np.sqrt(self.mse[prediction_key]))
+
+            pass
         return
 
     pass

@@ -78,8 +78,8 @@ def normalize_with_scaler(data, scaler):
     if scaler.__class__.__name__ == 'Standardization':
         return (data - scaler.data_mean[-num_column:]) / scaler.data_std[-num_column:]
     elif scaler.__class__.__name__ == 'MinMaxScaler':
-        padding = np.zeros((len(data), len(scaler.data_range_) - 1))
-        return scaler.transform(np.append(padding, data, axis=1))[:, -num_column]
+        padding = np.zeros((len(data), len(scaler.data_range_) - num_column))
+        return scaler.transform(np.append(padding, data, axis=1))[:, -num_column:]
     else:
         raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
 

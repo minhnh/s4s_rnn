@@ -17,15 +17,18 @@ class ExperimentEvalutation(object):
         self.predictions = {}
         self.mse = {}
         self._scalers = {}
+        self.weight_files = {}
 
         data_x, data_y = utils.get_data_from_sessions([session], num_timesteps=None, output_dim=1,
                                                       normalize=False, return_norm=False, old_norm=False)
-        scaler_min_max = utils.get_scaler(np.append(data_x, data_y, axis=1), old_norm=False)
-        scaler_standardization = utils.get_scaler(np.append(data_x, data_y, axis=1), old_norm=True)
+        data = np.append(data_x, data_y, axis=1)
+        num_feature = data_x.shape[1]
+        scaler_min_max, data_min_max = utils.get_scaler(data, old_norm=False, return_data=True)
+        scaler_standardization, data_standard = utils.get_scaler(data, old_norm=True, return_data=True)
         self.add_scaler(scaler_min_max)
         self.add_scaler(scaler_standardization)
-
-        self.true_output = data_y
+        self._x_normed = {_MINMAX : data_min_max[:, :num_feature], _STANDARD : data_standard[:, :num_feature]}
+        self._true_output = data_y
         pass
 
     def add_scaler(self, new_scaler):
@@ -53,9 +56,9 @@ class ExperimentEvalutation(object):
             if scaler_key not in self._scalers:
                 print('update_true_output: %s scaler is not initialized' % scaler_key)
                 return
-            self.true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
+            self._true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
         else:
-            self.true_output = true_outputs
+            self._true_output = true_outputs
         return
 
     def add_prediction(self, name, prediction, unnormalize=True, old_norm=False):
@@ -82,7 +85,46 @@ class ExperimentEvalutation(object):
             self.predictions[name] = prediction
             pass
 
-        self.mse[name] = np.mean((self.predictions[name] - self.true_output[-len(prediction):])**2)
+        self.mse[name] = np.mean((self.predictions[name] - self._true_output[-len(prediction):])**2)
+        return
+
+    def evaluate(self, model_json, prediction_name, weight_file=None, time_horizon=None):
+        match = re.match('(?:lstm|gru)_lookback(\d+)_\d+neurons(.*)', prediction_name)
+        if match is None:
+            print("%s evaluate: invalid prediction_name %s" % (ExperimentEvalutation.__name__, prediction_name))
+            return
+        if len(match.group(2)) == 0:
+            old_norm = False
+        else:
+            old_norm = True
+            pass
+        num_tsteps = int(match.group(1))
+
+        if prediction_name not in self.weight_files:
+            if weight_file is None:
+                print("No weight file associated with key %s" % (prediction_name))
+                return
+            self.weight_files[prediction_name] = weight_file
+            pass
+
+        from keras.models import model_from_json
+        model = model_from_json(model_json)
+
+        scaler_key = _STANDARD if old_norm else _MINMAX
+        data_x = utils.reshape_array_by_time_steps(self._x_normed[scaler_key], time_steps=num_tsteps)
+        data_y = utils.normalize_with_scaler(self._true_output, self._scalers[scaler_key])
+
+        prediction = utils.evaluate_model(model, self.weight_files[prediction_name],
+                                          data_x, data_y, horizon=time_horizon)
+
+        if time_horizon is None:
+            prediction_key = prediction_name
+        else:
+            prediction_key = prediction_name + ("_%dhorizon" % time_horizon)
+            pass
+
+        self.add_prediction(prediction_key, prediction)
+
         return
 
     def plot_predictions(self, prediction_names, plot_tiltle, file_name=None):
@@ -100,7 +142,7 @@ class ExperimentEvalutation(object):
             pass
 
         predictions = list(map(self.predictions.get, prediction_names))
-        utils.plot_predictions(predictions, prediction_names, self.true_output,
+        utils.plot_predictions(predictions, prediction_names, self._true_output,
                                plot_tiltle, file_name=file_name)
         return
 
@@ -185,8 +227,12 @@ class ExperimentEvalutationDict(dict):
         self.model_json[prediction_name] = loaded_model_json
         return True
 
-    def add_prediction_from_weight_file(self, weight_file_name, old_norm=False):
+    def add_weight_file(self, weight_file_name, old_norm=False):
         base_name = os.path.basename(weight_file_name)
+        if not os.path.exists(weight_file_name):
+            print("%s: file doesn't exist: %s" % (ExperimentEvalutationDict.__name__, weight_file_name))
+            return
+
         match = re.match('((gru|lstm)_\w+_(\d{8})_(\d{2})step_(\d{2})in_(\d{3})hidden_(\d{3})epoch)_(\S+)_weights.h5',
                          base_name)
         if match is None:
@@ -211,9 +257,12 @@ class ExperimentEvalutationDict(dict):
             model_file_name = os.path.join(dir_name, match.group(1) + "_model.json")
             print("%s: model for %s not recorded, looking for %s in %s" % (ExperimentEvalutationDict.__name__,
                                                                            model_file_name, prediction_name, dir_name))
-            if self.add_model_json(model_file_name):
-                pass
+            if not self.add_model_json(model_file_name):
+                print("%s: can't add model JSON from %s" % (ExperimentEvalutationDict.__name__, model_file_name))
+                return
             pass
+
+        self[session_name].weight_files[prediction_name] = weight_file_name
 
         return
 

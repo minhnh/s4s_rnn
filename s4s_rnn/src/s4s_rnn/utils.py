@@ -74,29 +74,38 @@ def normalize_with_scaler(data, scaler):
     :param scaler:
     :return:
     """
+    num_column = data.shape[1]
     if scaler.__class__.__name__ == 'Standardization':
-        return (data - scaler.data_mean) / scaler.data_std
+        return (data - scaler.data_mean[-num_column:]) / scaler.data_std[-num_column:]
     elif scaler.__class__.__name__ == 'MinMaxScaler':
-        return scaler.transform(data)
+        padding = np.zeros((len(data), len(scaler.data_range_) - 1))
+        return scaler.transform(np.append(padding, data, axis=1))[:, -num_column]
     else:
         raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
 
 
-def get_scaler(data, old_norm):
+def get_scaler(data, old_norm, return_data=False):
     """
     :param data:
     :param old_norm: if true use standardization
     :return: normalization scaler
     """
+    data_normed = None
     if old_norm:
         scaler = Standardization()
         scaler.data_mean = np.mean(data, axis=0)
         scaler.data_std = np.std(data, axis=0)
+        if return_data:
+            data_normed = normalize_with_scaler(data, scaler)
     else:
         scaler = MinMaxScaler(feature_range=(0, 1))
-        scaler.fit_transform(data)
+        data_normed = scaler.fit_transform(data)
         pass
-    return scaler
+
+    if return_data:
+        return scaler, data_normed
+    else:
+        return scaler
 
 
 def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize=True,

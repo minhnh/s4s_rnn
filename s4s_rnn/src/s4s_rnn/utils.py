@@ -58,11 +58,12 @@ def unnormalize(normalized_data, scaler):
     :param old_norm: whether to use old normalization strategy
     :return: None
     """
+    num_column = normalized_data.shape[1]
     if scaler.__class__.__name__ == 'Standardization':
-        return (normalized_data * scaler.data_std[-1] + scaler.data_mean[-1]).flatten()
+        return normalized_data * scaler.data_std[-num_column:] + scaler.data_mean[-num_column:]
     elif scaler.__class__.__name__ == 'MinMaxScaler':
-        padding = np.zeros((len(normalized_data), len(scaler.data_range_) - 1))
-        return scaler.inverse_transform(np.append(padding, normalized_data, axis=1))[:, -1]
+        padding = np.zeros((len(normalized_data), len(scaler.data_range_) - num_column))
+        return scaler.inverse_transform(np.append(padding, normalized_data, axis=1))[:, -num_column:]
     else:
         raise ValueError("Unrecognized scaler type: %s" % scaler.__class__.__name__)
 

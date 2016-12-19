@@ -1,6 +1,8 @@
 import os
 import re
 import numpy as np
+from matplotlib import pyplot as plt
+
 from sklearn.preprocessing import MinMaxScaler
 
 from sweat4science.messages import Session
@@ -67,7 +69,7 @@ class ExperimentEvalutation(object):
         self.add_scaler(scaler_min_max)
         self.add_scaler(scaler_standardization)
         self._x_normed = {_MINMAX : data_min_max[:, :num_feature], _STANDARD : data_standard[:, :num_feature]}
-        self._true_output = data_y
+        self.true_output = data_y
         pass
 
     def add_scaler(self, new_scaler):
@@ -95,9 +97,9 @@ class ExperimentEvalutation(object):
             if scaler_key not in self._scalers:
                 print('update_true_output: %s scaler is not initialized' % scaler_key)
                 return
-            self._true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
+            self.true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
         else:
-            self._true_output = true_outputs
+            self.true_output = true_outputs
         return
 
     def _add_prediction(self, name, prediction, old_norm, unnormalize=True):
@@ -120,7 +122,7 @@ class ExperimentEvalutation(object):
             self.predictions[name] = prediction
             pass
 
-        self.mse[name] = np.mean((self.predictions[name] - self._true_output[-len(prediction):])**2)
+        self.mse[name] = np.mean((self.predictions[name] - self.true_output[-len(prediction):])**2)
         return
 
     def evaluate(self, model_json, prediction_key, weight_file=None):
@@ -139,7 +141,7 @@ class ExperimentEvalutation(object):
 
         if prediction_key not in self.weight_files:
             if weight_file is None:
-                print("No weight file associated with key %s" % (prediction_key))
+                print("No weight file associated with key %s" % prediction_key)
                 return
             self.weight_files[prediction_key] = weight_file
             pass
@@ -158,7 +160,7 @@ class ExperimentEvalutation(object):
 
         scaler_key = _STANDARD if old_norm else _MINMAX
         data_x = utils.reshape_array_by_time_steps(self._x_normed[scaler_key], time_steps=num_tsteps)
-        data_y = utils.normalize_with_scaler(self._true_output, self._scalers[scaler_key])
+        data_y = utils.normalize_with_scaler(self.true_output, self._scalers[scaler_key])
 
         prediction = utils.evaluate_model(model, self.weight_files[prediction_key],
                                           data_x, data_y, horizon=time_horizon)
@@ -181,7 +183,7 @@ class ExperimentEvalutation(object):
             pass
 
         predictions = list(map(self.predictions.get, prediction_names))
-        utils.plot_predictions(predictions, prediction_names, self._true_output,
+        utils.plot_predictions(predictions, prediction_names, self.true_output,
                                plot_tiltle, file_name=file_name)
         return
 
@@ -197,6 +199,7 @@ class ExperimentEvalutationDict(dict):
         self.model_json = {}
         self.sessions = {}
         self.mse = {}
+        self._true_outputs = None
         if sessions is None:
             return
 
@@ -206,20 +209,36 @@ class ExperimentEvalutationDict(dict):
                                                                               Session.__name__))
                 pass
 
-            self.add_session(session)
-
-            self.update_experiment(session)
+            self[get_session_key(session.name)] = ExperimentEvalutation(session=session)
 
             pass
+
+        self._get_all_true_outputs()
+
         return
 
-    def add_session(self, session):
-        self[get_session_key(session.name)] = ExperimentEvalutation(session=session)
+    def _get_all_true_outputs(self):
+        """
+        Add all true_output array to self._true_outputs
+        """
+        true_outputs = None
+        for session_key in self.keys():
+            true_outputs = self[session_key].true_output if true_outputs is None \
+                else np.append(true_outputs, self[session_key].true_output, axis=0)
+            pass
+        self._true_outputs = true_outputs
         return
 
-    def update_experiment(self, exp_eval):
-        #TODO: check prediction_name in self.model_json
-        return
+    def _get_all_predictions(self, prediction_key):
+        """
+        Add all prediction named with prediction_key to an array and return
+        """
+        predictions = None
+        for session_key in self.keys():
+            predictions = self[session_key].predictions[prediction_key] if predictions is None \
+                else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
+            pass
+        return predictions
 
     def add_model_json(self, model_file_path, update=False, old_norm=False):
         """
@@ -327,22 +346,79 @@ class ExperimentEvalutationDict(dict):
             else:
                 prediction_key = prediction_name
 
-            predictions = None
-            true_outputs = None
             for session_key in self:
-                self[session_key].evaluate(self.model_json[prediction_name],
-                                           prediction_key=prediction_key)
-                predictions = self[session_key].predictions[prediction_key] if predictions is None \
-                    else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
-                true_outputs = self[session_key]._true_output if true_outputs is None \
-                    else np.append(true_outputs, self[session_key]._true_output, axis=0)
+                print("\ton %s" % session_key)
+                self[session_key].evaluate(self.model_json[prediction_name], prediction_key=prediction_key)
                 pass
 
-            self.mse[prediction_key] = np.mean((predictions - true_outputs)**2)
+            predictions = self._get_all_predictions(prediction_key)
+            self.mse[prediction_key] = np.mean((predictions - self._true_outputs)**2)
             print("   MSE: %f" % self.mse[prediction_key])
-            print("  RMSE: %f" % np.sqrt(self.mse[prediction_key]))
+            print("  RMSE: %f\n" % np.sqrt(self.mse[prediction_key]))
 
             pass
+        return
+
+    def plot_error_box_predictions(self, prediction_keys, title):
+        """
+        Styling ispired by http://matplotlib.org/examples/pylab_examples/boxplot_demo2.html
+        :param prediction_keys:
+        :param title:
+        :return:
+        """
+        squared_errors = []
+        for key in prediction_keys:
+            if key not in self.mse:
+                print("plot_error_box_predictions: prediction %s is not evaluated" % key)
+                continue
+            else:
+                prediction = self._get_all_predictions(key)
+                squared_error = (prediction - self._true_outputs)**2
+                print("\tmse: %.2f" % np.mean(squared_error))
+                squared_errors.append(squared_error)
+                pass
+            pass
+
+        fig, ax1 = plt.subplots(figsize=(10, 6))
+        fig.canvas.set_window_title(title)
+        plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+
+        bp = plt.boxplot(squared_errors, showmeans=True, labels=prediction_keys, notch=0, sym='+', vert=1, whis=1.5)
+
+        plt.setp(bp['boxes'], color='black')
+        plt.setp(bp['whiskers'], color='black')
+        plt.setp(bp['fliers'], color='red', marker='+')
+
+        # Add a horizontal grid to the plot, but make it very light in color
+        # so we can use it for reading data values but not be distracting
+        ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                       alpha=0.5)
+        # Hide these grid behind plot objects
+        ax1.set_axisbelow(True)
+        ax1.set_title(title)
+        ax1.set_xlabel('Prediction')
+        ax1.set_ylabel('Squared Error')
+
+        # Set the axes ranges and axes labels
+        ax1.set_xlim(0.5, len(prediction_keys) + 0.5)
+        top = max([np.max(t) for t in squared_errors])
+        bottom = min([np.min(t) for t in squared_errors])
+        ax1.set_ylim(bottom*0.90, top*1.90)
+        xtick_names = plt.setp(ax1, xticklabels=prediction_keys)
+        plt.setp(xtick_names, rotation=45, fontsize=8)
+
+        # Add upper X-axis tick labels with the mse
+        pos = np.arange(len(prediction_keys)) + 1
+        upper_labels = [str(np.round(self.mse[s], 2)) for s in prediction_keys]
+        weights = ['bold', 'semibold']
+        for tick, label in zip(range(len(prediction_keys)), ax1.get_xticklabels()):
+            k = tick % 2
+            ax1.text(pos[tick], top*1.1, upper_labels[tick],
+                     horizontalalignment='center', size='x-small', weight=weights[k])
+            pass
+
+        plt.yscale('log', basey=2)
+        plt.show()
         return
 
     pass

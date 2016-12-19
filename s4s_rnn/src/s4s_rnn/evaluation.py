@@ -359,13 +359,7 @@ class ExperimentEvalutationDict(dict):
             pass
         return
 
-    def plot_error_box_predictions(self, prediction_keys, title):
-        """
-        Styling ispired by http://matplotlib.org/examples/pylab_examples/boxplot_demo2.html
-        :param prediction_keys:
-        :param title:
-        :return:
-        """
+    def _get_squared_errors(self, prediction_keys):
         squared_errors = []
         for key in prediction_keys:
             if key not in self.mse:
@@ -374,51 +368,34 @@ class ExperimentEvalutationDict(dict):
             else:
                 prediction = self._get_all_predictions(key)
                 squared_error = (prediction - self._true_outputs)**2
-                print("\tmse: %.2f" % np.mean(squared_error))
+                # print("mse: %.2f" % np.mean(squared_error))
                 squared_errors.append(squared_error)
                 pass
             pass
+        return squared_errors
 
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        fig.canvas.set_window_title(title)
-        plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+    def plot_error_box_predictions(self, prediction_keys, title):
+        """
+        Styling ispired by http://matplotlib.org/examples/pylab_examples/boxplot_demo2.html
+        :param prediction_keys:
+        :param title:
+        :return:
+        """
+        squared_errors = self._get_squared_errors(prediction_keys)
+        utils.box_plot_error(squared_errors, title, labels=prediction_keys)
+        return
 
-        bp = plt.boxplot(squared_errors, showmeans=True, labels=prediction_keys, notch=0, sym='+', vert=1, whis=1.5)
-
-        plt.setp(bp['boxes'], color='black')
-        plt.setp(bp['whiskers'], color='black')
-        plt.setp(bp['fliers'], color='red', marker='+')
-
-        # Add a horizontal grid to the plot, but make it very light in color
-        # so we can use it for reading data values but not be distracting
-        ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
-                       alpha=0.5)
-        # Hide these grid behind plot objects
-        ax1.set_axisbelow(True)
-        ax1.set_title(title)
-        ax1.set_xlabel('Prediction')
-        ax1.set_ylabel('Squared Error')
-
-        # Set the axes ranges and axes labels
-        ax1.set_xlim(0.5, len(prediction_keys) + 0.5)
-        top = max([np.max(t) for t in squared_errors])
-        bottom = min([np.min(t) for t in squared_errors])
-        ax1.set_ylim(bottom*0.90, top*1.90)
-        xtick_names = plt.setp(ax1, xticklabels=prediction_keys)
-        plt.setp(xtick_names, rotation=45, fontsize=8)
-
-        # Add upper X-axis tick labels with the mse
-        pos = np.arange(len(prediction_keys)) + 1
-        upper_labels = [str(np.round(self.mse[s], 2)) for s in prediction_keys]
-        weights = ['bold', 'semibold']
-        for tick, label in zip(range(len(prediction_keys)), ax1.get_xticklabels()):
-            k = tick % 2
-            ax1.text(pos[tick], top*1.1, upper_labels[tick],
-                     horizontalalignment='center', size='x-small', weight=weights[k])
+    def plot_error_bar_predictions(self, title):
+        squared_error_groups = []
+        for ntstep in [5, 10, 15]:
+            group = []
+            for model_name in ['lstm', 'gru']:
+                squared_errors = self._get_squared_errors(["%s_lookback%02d_400neurons" % (model_name, ntstep)])
+                group.append(squared_errors[0])
+                pass
+            squared_error_groups.append(group)
             pass
-
-        plt.yscale('log', basey=2)
-        plt.show()
+        utils.bar_plot_error(squared_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
         return
 
     pass

@@ -278,3 +278,98 @@ def plot_predictions(predictions, prediction_names, true_output, title, file_nam
         pass
     pass
 
+
+def box_plot_error(squared_errors, title, labels):
+    """
+
+    :param squared_errors:
+    :param title:
+    :param labels:
+    :return:
+    """
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig.canvas.set_window_title(title)
+    plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+
+    bp = plt.boxplot(squared_errors, showmeans=True, labels=labels, notch=0, sym='+', vert=1, whis=1.5)
+
+    plt.setp(bp['boxes'], color='black')
+    plt.setp(bp['whiskers'], color='black')
+    plt.setp(bp['fliers'], color='red', marker='+')
+
+    # Add a horizontal grid to the plot, but make it very light in color
+    # so we can use it for reading data values but not be distracting
+    ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                   alpha=0.5)
+    # Hide these grid behind plot objects
+    ax1.set_axisbelow(True)
+    ax1.set_title(title)
+    ax1.set_xlabel('Prediction')
+    ax1.set_ylabel('Squared Error')
+
+    # Set the axes ranges and axes labels
+    ax1.set_xlim(0.5, len(labels) + 0.5)
+    top = max([np.max(t) for t in squared_errors])
+    bottom = min([np.min(t) for t in squared_errors])
+    ax1.set_ylim(bottom*0.90, top*1.90)
+    xtick_names = plt.setp(ax1, xticklabels=labels)
+    plt.setp(xtick_names, rotation=45, fontsize=8)
+
+    # Add upper X-axis tick labels with the mse
+    pos = np.arange(len(labels)) + 1
+    upper_labels = [str(np.round(np.mean(s), 2)) for s in squared_errors]
+    for tick, label in zip(range(len(labels)), ax1.get_xticklabels()):
+        ax1.text(pos[tick], top*1.1, upper_labels[tick],
+                 horizontalalignment='center', size='x-small', weight='bold')
+        pass
+
+    plt.yscale('log', basey=2)
+    plt.show()
+    return
+
+
+def bar_plot_error(squared_error_groups, title, prediction_labels, group_names):
+    """
+
+    :param squared_error_groups:
+    :param title:
+    :param prediction_labels:
+    :param group_names:
+    :return: None
+    """
+    colors = cycle('rbgcmykw')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.canvas.set_window_title(title)
+    plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+
+    num_group = len(squared_error_groups)
+    width = 1.0 / (num_group * (len(squared_error_groups[0]) + 1))
+    location = np.arange(num_group)
+    rect_groups = []
+    for prediction_index in range(len(squared_error_groups[0])):
+        means = []
+        stds = []
+        for group_index in range(num_group):
+            means.append(np.mean(squared_error_groups[group_index][prediction_index]))
+            stds.append(np.std(squared_error_groups[group_index][prediction_index]))
+            pass
+        print(len(means))
+        rects = ax.bar(location + prediction_index*width, means, width, color=next(colors), yerr=stds)
+        rect_groups.append(rects[0])
+        pass
+
+    ax.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                   alpha=0.5)
+    # Hide these grid behind plot objects
+    ax.set_axisbelow(True)
+    ax.set_xticks(location + width*num_group/2.0)
+    ax.legend(rect_groups, group_names)
+
+    xtick_names = plt.setp(ax, xticklabels=prediction_labels)
+    plt.setp(xtick_names, rotation=45, fontsize=8)
+
+    ax.set_title(title)
+    ax.set_xlabel('Prediction')
+    ax.set_ylabel('Squared Error')
+    plt.show()
+    return

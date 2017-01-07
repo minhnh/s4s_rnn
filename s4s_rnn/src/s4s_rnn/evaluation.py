@@ -1,12 +1,11 @@
 import os
 import re
 import numpy as np
-from matplotlib import pyplot as plt
 
 from sklearn.preprocessing import MinMaxScaler
 
 from sweat4science.messages import Session
-from s4s_rnn import utils
+from s4s_rnn import utils, plotting
 
 
 _MINMAX = MinMaxScaler.__name__
@@ -183,7 +182,7 @@ class ExperimentEvalutation(object):
             pass
 
         predictions = list(map(self.predictions.get, prediction_names))
-        utils.plot_predictions(predictions, prediction_names, self.true_output,
+        plotting.plot_predictions(predictions, prediction_names, self.true_output,
                                plot_tiltle, file_name=file_name)
         return
 
@@ -382,7 +381,7 @@ class ExperimentEvalutationDict(dict):
         :return:
         """
         abs_errors = self._get_abs_errors(prediction_keys)
-        utils.box_plot_error(abs_errors, title, labels=prediction_keys)
+        plotting.box_plot_error(abs_errors, title, labels=prediction_keys)
         return
 
     def plot_error_bar_predictions(self, title):
@@ -395,7 +394,7 @@ class ExperimentEvalutationDict(dict):
                 pass
             abs_error_groups.append(group)
             pass
-        utils.bar_plot_error(abs_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
+        plotting.bar_plot_error(abs_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
         return
 
     pass

@@ -109,6 +109,10 @@ def get_scaler(data, old_norm, return_data=False):
         return scaler
 
 
+def get_data_from_session(session):
+    return np.array([session.distance, session.velocity, session.acceleration, session.time, session.hbm], ndmin=2).T
+
+
 def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize=True,
                            return_norm=False, old_norm=False):
     """
@@ -126,7 +130,7 @@ def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize
     data_multiple_arrays = []
     data_single_array = None
     for s in sessions:
-        data = np.array([s.distance, s.velocity, s.acceleration, s.time, s.hbm], ndmin=2).T
+        data = get_data_from_session(s)
         data_multiple_arrays.append(data)
         data_single_array = data if data_single_array is None else \
             np.append(data_single_array, data, axis=0)
@@ -279,19 +283,19 @@ def plot_predictions(predictions, prediction_names, true_output, title, file_nam
     pass
 
 
-def box_plot_error(squared_errors, title, labels):
+def box_plot_error(abs_errors, title, labels):
     """
 
-    :param squared_errors:
+    :param abs_errors:
     :param title:
     :param labels:
     :return:
     """
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, ax1 = plt.subplots(figsize=(10, 7))
     fig.canvas.set_window_title(title)
     plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
 
-    bp = plt.boxplot(squared_errors, showmeans=True, labels=labels, notch=0, sym='+', vert=1, whis=1.5)
+    bp = plt.boxplot(abs_errors, showmeans=True, labels=labels, notch=0, sym='+', vert=1, whis=1.5)
 
     plt.setp(bp['boxes'], color='black')
     plt.setp(bp['whiskers'], color='black')
@@ -309,21 +313,22 @@ def box_plot_error(squared_errors, title, labels):
 
     # Set the axes ranges and axes labels
     ax1.set_xlim(0.5, len(labels) + 0.5)
-    top = max([np.max(t) for t in squared_errors])
-    bottom = min([np.min(t) for t in squared_errors])
-    ax1.set_ylim(bottom*0.90, top*1.90)
+    top = max([np.max(t) for t in abs_errors])
+    bottom = min([np.min(t) for t in abs_errors])
+    difference = top - bottom
+    ax1.set_ylim(bottom - 0.10*difference, top + 0.08*difference)
     xtick_names = plt.setp(ax1, xticklabels=labels)
     plt.setp(xtick_names, rotation=45, fontsize=8)
 
     # Add upper X-axis tick labels with the mse
     pos = np.arange(len(labels)) + 1
-    upper_labels = [str(np.round(np.mean(s), 2)) for s in squared_errors]
+    upper_labels = [str(np.round(np.sqrt(np.mean(s**2)), 2)) for s in abs_errors]
     for tick, label in zip(range(len(labels)), ax1.get_xticklabels()):
-        ax1.text(pos[tick], top*1.1, upper_labels[tick],
+        ax1.text(pos[tick], top + 0.02*difference, upper_labels[tick],
                  horizontalalignment='center', size='x-small', weight='bold')
         pass
 
-    plt.yscale('log', basey=2)
+    # plt.yscale('log', basey=2)
     plt.show()
     return
 

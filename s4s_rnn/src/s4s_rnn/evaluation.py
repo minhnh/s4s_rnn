@@ -359,20 +359,20 @@ class ExperimentEvalutationDict(dict):
             pass
         return
 
-    def _get_squared_errors(self, prediction_keys):
-        squared_errors = []
+    def _get_abs_errors(self, prediction_keys):
+        abs_errors = []
         for key in prediction_keys:
             if key not in self.mse:
                 print("plot_error_box_predictions: prediction %s is not evaluated" % key)
                 continue
             else:
                 prediction = self._get_all_predictions(key)
-                squared_error = (prediction - self._true_outputs)**2
+                abs_error = np.abs(prediction - self._true_outputs)
                 # print("mse: %.2f" % np.mean(squared_error))
-                squared_errors.append(squared_error)
+                abs_errors.append(abs_error)
                 pass
             pass
-        return squared_errors
+        return abs_errors
 
     def plot_error_box_predictions(self, prediction_keys, title):
         """
@@ -381,21 +381,21 @@ class ExperimentEvalutationDict(dict):
         :param title:
         :return:
         """
-        squared_errors = self._get_squared_errors(prediction_keys)
-        utils.box_plot_error(squared_errors, title, labels=prediction_keys)
+        abs_errors = self._get_abs_errors(prediction_keys)
+        utils.box_plot_error(abs_errors, title, labels=prediction_keys)
         return
 
     def plot_error_bar_predictions(self, title):
-        squared_error_groups = []
+        abs_error_groups = []
         for ntstep in [5, 10, 15]:
             group = []
             for model_name in ['lstm', 'gru']:
-                squared_errors = self._get_squared_errors(["%s_lookback%02d_400neurons" % (model_name, ntstep)])
-                group.append(squared_errors[0])
+                abs_errors = self._get_abs_errors(["%s_lookback%02d_400neurons" % (model_name, ntstep)])
+                group.append(abs_errors[0])
                 pass
-            squared_error_groups.append(group)
+            abs_error_groups.append(group)
             pass
-        utils.bar_plot_error(squared_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
+        utils.bar_plot_error(abs_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
         return
 
     pass

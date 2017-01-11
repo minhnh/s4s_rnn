@@ -1,27 +1,51 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 from itertools import cycle
 
 
-def plot_multi_y(y1, y2, x_label, y1_label, y2_label, title, x=None):
+def plot_multi_y(y1, y2, x_label, y1_label, y2_label, title, x=None, y1_range=None, y2_range=None):
+    """
+
+    :param y1:
+    :param y2:
+    :param x_label:
+    :param y1_label:
+    :param y2_label:
+    :param title:
+    :param x:
+    :param y1_range:
+    :param y2_range:
+    :return: None
+    """
     if x is None:
         x = list(range(max(len(y1), len(y2))))
         pass
     fig, ax1 = plt.subplots()
-    ax1.plot(x, y1, 'r.')
+    fig.set_size_inches(10, 10)
+    matplotlib.rcParams.update({'font.size': 20})
+    ax1.plot(x, y1, 'r.', markersize=20)
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y1_label, color='r')
+    if y1_range is not None:
+        ax1.set_ylim(tuple(y1_range))
+        pass
     for tl in ax1.get_yticklabels():
         tl.set_color('r')
         pass
 
     ax2 = ax1.twinx()
-    ax2.plot(x, y2, '--')
-    ax2.set_ylabel(y2_label, color='b')
-    for tl in ax2.get_yticklabels():
-        tl.set_color('b')
+    ax2.plot(x, y2, '--', markersize=20, color='black')
+    ax2.set_ylabel(y2_label, color='black')
+    if y2_range is not None:
+        ax2.set_ylim(tuple(y2_range))
         pass
-    plt.title(title)
+    for tl in ax2.get_yticklabels():
+        tl.set_color('black')
+        pass
+    if title is not None:
+        plt.title(title)
+        pass
     plt.grid()
     plt.show()
     return
@@ -86,9 +110,11 @@ def plot_predictions(predictions, prediction_names, true_output, title, file_nam
                             label='True output')
     lines.append(line_actual)
     for index, prediction in enumerate(predictions):
+        rmse = np.sqrt(np.mean((prediction - true_output[-len(prediction):])**2))
+        label = "%s [RMSE %.2f]" % (prediction_names[index], rmse)
         line_predict, = plt.plot(x[-len(prediction):], prediction, '-+',
                                  c=next(colors), markersize=4,
-                                 label=prediction_names[index])
+                                 label=label)
         lines.append(line_predict)
         pass
 
@@ -190,7 +216,7 @@ def bar_plot_error(squared_error_groups, title, prediction_labels, group_names):
             means.append(np.mean(squared_error_groups[group_index][prediction_index]))
             stds.append(np.std(squared_error_groups[group_index][prediction_index]))
             pass
-        print(len(means))
+        #print(len(means))
         rects = ax.bar(location + prediction_index*width, means, width, color=next(colors), yerr=stds)
         rect_groups.append(rects[0])
         pass

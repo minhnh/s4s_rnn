@@ -1,3 +1,5 @@
+import os
+import re
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 
@@ -8,6 +10,23 @@ class Standardization(object):
         self.data_std = None
         return
     pass
+
+
+def get_sessions():
+    """  """
+    from sweat4science.s4sconfig import workspace_dir
+    from sweat4science.workspace.Workspace import Workspace
+    from sweat4science.evaluation.sessionset import MF_sessionset as mfs
+
+    workspace_folder = os.path.join(workspace_dir, "session-data")
+    ws = Workspace(workspace_folder)
+    sessions = mfs.ICT_indoor(ws)
+    # Skip slope sessions
+    for session in sessions:
+        if len(re.findall("slope", str(session))) > 0:
+            sessions.remove(session)
+        pass
+    return sessions
 
 
 def reshape_array_by_time_steps(input_array, time_steps=1):

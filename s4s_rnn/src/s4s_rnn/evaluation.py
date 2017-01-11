@@ -4,8 +4,9 @@ import numpy as np
 
 from sklearn.preprocessing import MinMaxScaler
 
+import sweat4science as s4s
 from sweat4science.messages import Session
-from s4s_rnn import utils, plotting
+from s4s_rnn import utils, plotting, models
 
 
 _MINMAX = MinMaxScaler.__name__
@@ -101,7 +102,7 @@ class ExperimentEvalutation(object):
             self.true_output = true_outputs
         return
 
-    def _add_prediction(self, name, prediction, old_norm, unnormalize=True):
+    def add_prediction(self, name, prediction, old_norm, unnormalize=True):
         """
 
         :param name:
@@ -164,7 +165,7 @@ class ExperimentEvalutation(object):
         prediction = utils.evaluate_model(model, self.weight_files[prediction_key],
                                           data_x, data_y, horizon=time_horizon)
 
-        self._add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
+        self.add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
 
         return
 
@@ -355,6 +356,30 @@ class ExperimentEvalutationDict(dict):
             print("   MSE: %f" % self.mse[prediction_key])
             print("  RMSE: %f\n" % np.sqrt(self.mse[prediction_key]))
 
+            pass
+        return
+
+    def evaluate_old_model(self, model_name, lookback):
+        if model_name == "SVM":
+            model_definition = s4s.Definitions.TestSet_SVM
+        elif model_name == "LR_Ridge":
+            model_definition = s4s.Definitions.TestSet_LR_Ridge
+        elif model_name == "MLP":
+            model_definition = s4s.Definitions.TestSet_NN
+        elif model_name == "Cheng_Tanh":
+            model_definition = s4s.Definitions.TestSet_Cheng_Tanh
+        else:
+            raise ValueError("Invalid model name")
+        sessions = []
+        for session_key, exp_eval in self.items():
+            sessions.append(exp_eval.session)
+            pass
+        results = models.run_old_models(model_definition, lookback, sessions)
+        for session_name, [prediction, actual_hbm] in results.items():
+            prediction_key = "%s_regressor%02d" % (model_name, lookback)
+            self[get_session_key(session_name)].add_prediction(prediction_key, prediction.reshape(len(prediction), 1),
+                                                               old_norm=False, unnormalize=False)
+            self.mse[prediction_key] = ((prediction - actual_hbm) ** 2).mean()
             pass
         return
 

@@ -236,3 +236,55 @@ def bar_plot_error(squared_error_groups, title, prediction_labels, group_names):
     ax.set_ylabel('Squared Error')
     plt.show()
     return
+
+
+def plot_hbm_velocity(eval_dict, session_list):
+    """
+
+    :param eval_dict:
+    :param session_list:
+    :return:
+    """
+    for s_eval in map(eval_dict.get, session_list):
+        data = utils.get_data_from_session(s_eval.session)
+        plotting.plot_multi_y(data[:, -1], data[:, 1], "Time (s)", "Heart rate (hbm)", "Velocity (m/s)",
+                s_eval.session.name, np.arange(0, data.shape[0]*10, 10), y1_range=(80, 200), y2_range=(-1, 5))
+        pass
+    return
+
+
+def plot_epoch(log_file):
+    """
+
+    :param log_file:
+    :return:
+    """
+    train_info = np.genfromtxt(log_file, delimiter=",", skip_header=1)
+    fig, ax = plt.subplots()
+    fig.set_size_inches(10, 7)
+
+    max_y = np.max(train_info[:, 1:3])
+    min_y = np.min(train_info[:, 1:3])
+    difference = max_y - min_y
+    ax.set_ylim([min_y - difference*0.1, max_y + difference*0.1])
+
+    epochs = list(map(int, train_info[:, 0]))
+    acc_line, = ax.plot(epochs, train_info[:, 1], '-r+',
+                         markersize=4, label='train accuracy')
+    val_line, = ax.plot(epochs, train_info[:, 2], '-g+',
+                         markersize=4, label='validation accuracy')
+    # Shrink current axis's height by 10% on the bottom
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0 + box.height * 0.1,
+                     box.width, box.height * 0.9])
+
+    ax.legend(handles=[acc_line, val_line], loc='upper center',
+              bbox_to_anchor=(0.5, -0.08), fancybox=True,
+              shadow=True, ncol=2)
+    plt.title('Validation and training accuracy per epoch')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Epoch')
+
+    plt.grid()
+    plt.show()
+    return

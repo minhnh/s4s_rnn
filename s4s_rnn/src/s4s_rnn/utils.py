@@ -1,6 +1,7 @@
+import argparse
+import os
+import re
 import numpy as np
-import matplotlib.pyplot as plt
-from itertools import cycle
 from sklearn.preprocessing import MinMaxScaler
 
 
@@ -10,6 +11,40 @@ class Standardization(object):
         self.data_std = None
         return
     pass
+
+
+class ReadableDir(argparse.Action):
+    """
+    Valid directory check from
+    https://stackoverflow.com/questions/11415570/directory-path-types-with-argparse
+    """
+    def __call__(self, parser, namespace, values, option_string=None):
+        prospective_dir = values
+        if not os.path.isdir(prospective_dir):
+            raise argparse.ArgumentTypeError("ReadableDir: {0} is not a valid path".format(prospective_dir))
+        if os.access(prospective_dir, os.R_OK):
+            setattr(namespace, self.dest, prospective_dir)
+        else:
+            raise argparse.ArgumentTypeError("ReadableDir: {0} is not a readable dir".format(prospective_dir))
+        pass
+    pass
+
+
+def get_sessions():
+    """  """
+    from sweat4science.s4sconfig import workspace_dir
+    from sweat4science.workspace.Workspace import Workspace
+    from sweat4science.evaluation.sessionset import MF_sessionset as mfs
+
+    workspace_folder = os.path.join(workspace_dir, "session-data")
+    ws = Workspace(workspace_folder)
+    sessions = mfs.ICT_indoor(ws)
+    # Skip slope sessions
+    for session in sessions:
+        if len(re.findall("slope", str(session))) > 0:
+            sessions.remove(session)
+        pass
+    return sessions
 
 
 def reshape_array_by_time_steps(input_array, time_steps=1):
@@ -109,6 +144,10 @@ def get_scaler(data, old_norm, return_data=False):
         return scaler
 
 
+def get_data_from_session(session):
+    return np.array([session.distance, session.velocity, session.acceleration, session.time, session.hbm], ndmin=2).T
+
+
 def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize=True,
                            return_norm=False, old_norm=False):
     """
@@ -126,7 +165,7 @@ def get_data_from_sessions(sessions, num_timesteps=None, output_dim=1, normalize
     data_multiple_arrays = []
     data_single_array = None
     for s in sessions:
-        data = np.array([s.distance, s.velocity, s.acceleration, s.time, s.hbm], ndmin=2).T
+        data = get_data_from_session(s)
         data_multiple_arrays.append(data)
         data_single_array = data if data_single_array is None else \
             np.append(data_single_array, data, axis=0)
@@ -189,92 +228,3 @@ def evaluate_model(model, weights_file, data_x, data_y, horizon=None):
     prediction = model.predict(data_x)
 
     return prediction
-
-
-def plot_inputs(inputs):
-    """
-    Function to plot input features, each feature in a separated subplot
-    :param inputs: input features as (num_samples, num_features) array
-    :return: None
-    """
-    num_features = inputs.shape[1]
-    feature_names = ['distance', 'velocity', 'acceleration', 'time']
-    figure, subplots = plt.subplots(num_features, sharex=True)
-    for i in range(num_features):
-        subplots[i].plot(inputs[:, i], '-or', label=feature_names[i])
-        subplots[i].set_title('Plot of normalized %s' % feature_names[i])
-        max_input = np.max(inputs[:, i])
-        min_input = np.min(inputs[:, i])
-        difference = max_input - min_input
-        subplots[i].set_ylim([min_input - 0.1*difference,
-                              max_input + 0.1*difference])
-        subplots[i].grid()
-        pass
-
-    figure.subplots_adjust(hspace=0.2)
-    figure.set_size_inches((10, 10))
-    plt.setp([a.get_xticklabels() for a in figure.axes[:-1]], visible=False)
-    plt.show()
-    return
-
-
-def plot_predictions(predictions, prediction_names, true_output, title, file_name=None,
-                     y_label="Heart rate (hbm)", x_label="Time steps", show_plot=True):
-    """
-    Visualise comparison between prediction and actual data
-
-    :param predictions: list of predicted outputs
-    :param prediction_names: names of predictions for plot labels
-    :param true_output: actual outputs
-    :param file_name: name of image file for saving plot
-    :param title:
-    :param y_label:
-    :param x_label:
-    :param save_plot: if True will write plot image to file_name
-    :param show_plot: if True will show plot
-    :return: None
-    """
-    if len(predictions) != len(prediction_names):
-        print("Lengths of prediction list and prediction names must equal")
-        return
-
-    max_len = max(map(lambda pred : len(pred), predictions))
-    x = list(range(max_len))
-
-    plt.figure(figsize=(10, 7))
-    ax = plt.subplot(111)
-
-    colors = cycle('rbgcmykw')
-    lines = []
-    line_actual, = plt.plot(x, true_output[-max_len:], '-o', c=next(colors), markersize=4,
-                            label='True output')
-    lines.append(line_actual)
-    for index, prediction in enumerate(predictions):
-        line_predict, = plt.plot(x[-len(prediction):], prediction, '-+',
-                                 c=next(colors), markersize=4,
-                                 label=prediction_names[index])
-        lines.append(line_predict)
-        pass
-
-    # Shrink current axis's height by 10% on the bottom
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0 + box.height * 0.1,
-                     box.width, box.height * 0.9])
-
-    ax.legend(handles=lines, loc='upper center',
-              bbox_to_anchor=(0.5, -0.08), fancybox=True,
-              shadow=True, ncol=2)
-    plt.title(title)
-    plt.ylabel(y_label)
-    plt.xlabel(x_label)
-    plt.grid()
-
-    if type(file_name).__name__ == 'str':
-        plt.savefig(file_name)
-        pass
-
-    if show_plot:
-        plt.show()
-        pass
-    pass
-

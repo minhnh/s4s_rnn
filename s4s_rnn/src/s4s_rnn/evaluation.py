@@ -1,10 +1,12 @@
 import os
 import re
 import numpy as np
+
 from sklearn.preprocessing import MinMaxScaler
 
+import sweat4science as s4s
 from sweat4science.messages import Session
-from s4s_rnn import utils
+from s4s_rnn import utils, plotting, models
 
 
 _MINMAX = MinMaxScaler.__name__
@@ -67,7 +69,7 @@ class ExperimentEvalutation(object):
         self.add_scaler(scaler_min_max)
         self.add_scaler(scaler_standardization)
         self._x_normed = {_MINMAX : data_min_max[:, :num_feature], _STANDARD : data_standard[:, :num_feature]}
-        self._true_output = data_y
+        self.true_output = data_y
         pass
 
     def add_scaler(self, new_scaler):
@@ -95,12 +97,12 @@ class ExperimentEvalutation(object):
             if scaler_key not in self._scalers:
                 print('update_true_output: %s scaler is not initialized' % scaler_key)
                 return
-            self._true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
+            self.true_output = utils.unnormalize(true_outputs, self._scalers[scaler_key])
         else:
-            self._true_output = true_outputs
+            self.true_output = true_outputs
         return
 
-    def _add_prediction(self, name, prediction, old_norm, unnormalize=True):
+    def add_prediction(self, name, prediction, old_norm, unnormalize=True):
         """
 
         :param name:
@@ -120,7 +122,7 @@ class ExperimentEvalutation(object):
             self.predictions[name] = prediction
             pass
 
-        self.mse[name] = np.mean((self.predictions[name] - self._true_output[-len(prediction):])**2)
+        self.mse[name] = np.mean((self.predictions[name] - self.true_output[-len(prediction):])**2)
         return
 
     def evaluate(self, model_json, prediction_key, weight_file=None):
@@ -139,7 +141,7 @@ class ExperimentEvalutation(object):
 
         if prediction_key not in self.weight_files:
             if weight_file is None:
-                print("No weight file associated with key %s" % (prediction_key))
+                print("No weight file associated with key %s" % prediction_key)
                 return
             self.weight_files[prediction_key] = weight_file
             pass
@@ -158,12 +160,12 @@ class ExperimentEvalutation(object):
 
         scaler_key = _STANDARD if old_norm else _MINMAX
         data_x = utils.reshape_array_by_time_steps(self._x_normed[scaler_key], time_steps=num_tsteps)
-        data_y = utils.normalize_with_scaler(self._true_output, self._scalers[scaler_key])
+        data_y = utils.normalize_with_scaler(self.true_output, self._scalers[scaler_key])
 
         prediction = utils.evaluate_model(model, self.weight_files[prediction_key],
                                           data_x, data_y, horizon=time_horizon)
 
-        self._add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
+        self.add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
 
         return
 
@@ -181,7 +183,7 @@ class ExperimentEvalutation(object):
             pass
 
         predictions = list(map(self.predictions.get, prediction_names))
-        utils.plot_predictions(predictions, prediction_names, self._true_output,
+        plotting.plot_predictions(predictions, prediction_names, self.true_output,
                                plot_tiltle, file_name=file_name)
         return
 
@@ -197,6 +199,7 @@ class ExperimentEvalutationDict(dict):
         self.model_json = {}
         self.sessions = {}
         self.mse = {}
+        self._true_outputs = None
         if sessions is None:
             return
 
@@ -206,20 +209,36 @@ class ExperimentEvalutationDict(dict):
                                                                               Session.__name__))
                 pass
 
-            self.add_session(session)
-
-            self.update_experiment(session)
+            self[get_session_key(session.name)] = ExperimentEvalutation(session=session)
 
             pass
+
+        self._get_all_true_outputs()
+
         return
 
-    def add_session(self, session):
-        self[get_session_key(session.name)] = ExperimentEvalutation(session=session)
+    def _get_all_true_outputs(self):
+        """
+        Add all true_output array to self._true_outputs
+        """
+        true_outputs = None
+        for session_key in self.keys():
+            true_outputs = self[session_key].true_output if true_outputs is None \
+                else np.append(true_outputs, self[session_key].true_output, axis=0)
+            pass
+        self._true_outputs = true_outputs
         return
 
-    def update_experiment(self, exp_eval):
-        #TODO: check prediction_name in self.model_json
-        return
+    def _get_all_predictions(self, prediction_key):
+        """
+        Add all prediction named with prediction_key to an array and return
+        """
+        predictions = None
+        for session_key in self.keys():
+            predictions = self[session_key].predictions[prediction_key] if predictions is None \
+                else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
+            pass
+        return predictions
 
     def add_model_json(self, model_file_path, update=False, old_norm=False):
         """
@@ -327,22 +346,80 @@ class ExperimentEvalutationDict(dict):
             else:
                 prediction_key = prediction_name
 
-            predictions = None
-            true_outputs = None
             for session_key in self:
-                self[session_key].evaluate(self.model_json[prediction_name],
-                                           prediction_key=prediction_key)
-                predictions = self[session_key].predictions[prediction_key] if predictions is None \
-                    else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
-                true_outputs = self[session_key]._true_output if true_outputs is None \
-                    else np.append(true_outputs, self[session_key]._true_output, axis=0)
+                print("\ton %s" % session_key)
+                self[session_key].evaluate(self.model_json[prediction_name], prediction_key=prediction_key)
                 pass
 
-            self.mse[prediction_key] = np.mean((predictions - true_outputs)**2)
+            predictions = self._get_all_predictions(prediction_key)
+            self.mse[prediction_key] = np.mean((predictions - self._true_outputs)**2)
             print("   MSE: %f" % self.mse[prediction_key])
-            print("  RMSE: %f" % np.sqrt(self.mse[prediction_key]))
+            print("  RMSE: %f\n" % np.sqrt(self.mse[prediction_key]))
 
             pass
+        return
+
+    def evaluate_old_model(self, model_name, lookback):
+        if model_name == "SVM":
+            model_definition = s4s.Definitions.TestSet_SVM
+        elif model_name == "LR_Ridge":
+            model_definition = s4s.Definitions.TestSet_LR_Ridge
+        elif model_name == "MLP":
+            model_definition = s4s.Definitions.TestSet_NN
+        elif model_name == "Cheng_Tanh":
+            model_definition = s4s.Definitions.TestSet_Cheng_Tanh
+        else:
+            raise ValueError("Invalid model name")
+        sessions = []
+        for session_key, exp_eval in self.items():
+            sessions.append(exp_eval.session)
+            pass
+        results = models.run_old_models(model_definition, lookback, sessions)
+        for session_name, [prediction, actual_hbm] in results.items():
+            prediction_key = "%s_regressor%02d" % (model_name, lookback)
+            self[get_session_key(session_name)].add_prediction(prediction_key, prediction.reshape(len(prediction), 1),
+                                                               old_norm=False, unnormalize=False)
+            self.mse[prediction_key] = ((prediction - actual_hbm) ** 2).mean()
+            pass
+        return
+
+    def _get_abs_errors(self, prediction_keys):
+        abs_errors = []
+        for key in prediction_keys:
+            if key not in self.mse:
+                print("plot_error_box_predictions: prediction %s is not evaluated" % key)
+                continue
+            else:
+                prediction = self._get_all_predictions(key)
+                abs_error = np.abs(prediction - self._true_outputs)
+                # print("mse: %.2f" % np.mean(squared_error))
+                abs_errors.append(abs_error)
+                pass
+            pass
+        return abs_errors
+
+    def plot_error_box_predictions(self, prediction_keys, title):
+        """
+        Styling ispired by http://matplotlib.org/examples/pylab_examples/boxplot_demo2.html
+        :param prediction_keys:
+        :param title:
+        :return:
+        """
+        abs_errors = self._get_abs_errors(prediction_keys)
+        plotting.box_plot_error(abs_errors, title, labels=prediction_keys)
+        return
+
+    def plot_error_bar_predictions(self, title):
+        abs_error_groups = []
+        for ntstep in [5, 10, 15]:
+            group = []
+            for model_name in ['lstm', 'gru']:
+                abs_errors = self._get_abs_errors(["%s_lookback%02d_400neurons" % (model_name, ntstep)])
+                group.append(abs_errors[0])
+                pass
+            abs_error_groups.append(group)
+            pass
+        plotting.bar_plot_error(abs_error_groups, title, ["Lookback 5", "Lookback 10", "Lookback 15"], ["LSTM", "GRU"])
         return
 
     pass

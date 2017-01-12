@@ -16,10 +16,10 @@ def get_arguments():
         Script to run plotting functions
         '''))
     parser.add_argument('--scenario', '-s', type=str,
-                        choices=['hbm_velocity', 'epoch_error'],
+                        choices=['hbm_velocity', 'epoch_error', 'keras_model'],
                         default='hbm_velocity',
                         help='choice of plotting function')
-    parser.add_argument('--file', '-f', type=argparse.FileType('rb'),
+    parser.add_argument('--file', '-f', type=argparse.FileType('r'),
                         help="training log file to plot errors by epoch, required for epoch_error scenario")
     return parser
 
@@ -38,7 +38,20 @@ def main(parser):
             print("epoch_error scenario requires argument log file")
             parser.print_usage()
             return
-        plotting.plot_epoch(arguments.file)
+        plotting.plot_epoch(arguments.file.name)
+    elif arguments.scenario == 'keras_model':
+        from keras.utils.visualize_util import plot
+        from keras.models import model_from_json
+
+        if arguments.file is None:
+            print("epoch_error scenario requires argument log file")
+            parser.print_usage()
+            return
+
+        model_json = arguments.file.read()
+        model = model_from_json(model_json)
+        plot(model, show_shapes=True)
+
         pass
     return
 

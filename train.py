@@ -137,7 +137,7 @@ def main(arguments):
     print("\nconstructing %s model..." % str.upper(arguments.model))
     date_string = time.strftime("%Y%m%d")
     print("----------------------------------------------------\n"
-          "Model: %s\n")
+          "Model: %s\n" % arguments.model)
     if arguments.scenario == 'vary_time':
         print("Number of hidden neurons: %d\n"
               "Lookback: %s time steps\n"

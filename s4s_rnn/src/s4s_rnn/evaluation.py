@@ -222,7 +222,7 @@ class ExperimentEvalutationDict(dict):
         Add all true_output array to self._true_outputs
         """
         true_outputs = None
-        for session_key in self.keys():
+        for session_key in sorted(self.keys()):
             true_outputs = self[session_key].true_output if true_outputs is None \
                 else np.append(true_outputs, self[session_key].true_output, axis=0)
             pass
@@ -234,7 +234,7 @@ class ExperimentEvalutationDict(dict):
         Add all prediction named with prediction_key to an array and return
         """
         predictions = None
-        for session_key in self.keys():
+        for session_key in sorted(self.keys()):
             predictions = self[session_key].predictions[prediction_key] if predictions is None \
                 else np.append(predictions, self[session_key].predictions[prediction_key], axis=0)
             pass
@@ -391,6 +391,7 @@ class ExperimentEvalutationDict(dict):
                 continue
             else:
                 prediction = self._get_all_predictions(key)
+                # print(self._true_outputs.shape)
                 abs_error = np.abs(prediction - self._true_outputs)
                 # print("mse: %.2f" % np.mean(squared_error))
                 abs_errors.append(abs_error)

@@ -178,7 +178,7 @@ def box_plot_error(abs_errors, title, labels):
     xtick_names = plt.setp(ax1, xticklabels=labels)
     plt.setp(xtick_names, rotation=45, fontsize=8)
 
-    # Add upper X-axis tick labels with the mse
+    # Add upper X-axis tick labels with the rmse
     pos = np.arange(len(labels)) + 1
     upper_labels = [str(np.round(np.sqrt(np.mean(s**2)), 2)) for s in abs_errors]
     for tick, label in zip(range(len(labels)), ax1.get_xticklabels()):
@@ -245,10 +245,11 @@ def plot_hbm_velocity(eval_dict, session_list):
     :param session_list:
     :return:
     """
+    from s4s_rnn import utils
     for s_eval in map(eval_dict.get, session_list):
         data = utils.get_data_from_session(s_eval.session)
-        plotting.plot_multi_y(data[:, -1], data[:, 1], "Time (s)", "Heart rate (hbm)", "Velocity (m/s)",
-                s_eval.session.name, np.arange(0, data.shape[0]*10, 10), y1_range=(80, 200), y2_range=(-1, 5))
+        plot_multi_y(data[:, -1], data[:, 1], "Time (s)", "Heart rate (hbm)", "Velocity (m/s)",
+                     s_eval.session.name, np.arange(0, data.shape[0]*10, 10), y1_range=(80, 200), y2_range=(-1, 5))
         pass
     return
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import re
@@ -6,6 +6,10 @@ import time
 import argparse
 import textwrap
 
+from keras.models import model_from_json
+from keras.callbacks import CSVLogger
+
+from s4s_rnn import models, utils
 
 _LOOKBACKS = [5, 10, 15]
 _NEURON_NUMS = list(range(10, 100, 10))
@@ -27,17 +31,41 @@ def get_arguments():
                         choices=['vary_time', 'vary_neuron'],
                         default='vary_time',
                         help='training scenarios to run')
-    parser.add_argument('--num_neurons', '-n', type=int, default=400,
+    parser.add_argument('--num_neurons', '-n', type=int, default=10,
+                        help='number of hidden neurons in the perceptron layer')
+    parser.add_argument('--multi_process', '-p', type=bool, default=False,
                         help='number of hidden neurons in the perceptron layer')
     return parser.parse_args()
 
 
+def train_keras_model(train_sessions, test_sessions, num_tsteps, base_name, verbose=2):
+    json_file = open(base_name + '_model.json', 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    loaded_model.compile(loss='mean_squared_error', optimizer='rmsprop')
+
+    match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
+    # put name of evaluation set in saved filenames
+    cross_validation_name = "%s_%s_%s" % (base_name, match.groups()[0], match.groups()[1])
+
+    train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions, num_tsteps)
+    test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, num_tsteps)
+
+    csv_logger = CSVLogger(cross_validation_name + "_training.log", append=False)
+    loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
+                     nb_epoch=arguments.num_epoch, validation_data=(test_data_x, test_data_y),
+                     callbacks=[csv_logger], verbose=verbose)
+
+    # serialize weights to HDF5
+    loaded_model.save_weights(cross_validation_name + "_weights.h5")
+
+    print("Completed training for session %s" % test_sessions[0].name)
+    return
+
+
 def train_cross_validation(sessions, model, num_hidden, num_tsteps, date_string):
     from sklearn.model_selection import KFold
-    from keras.models import model_from_json
-    from keras.callbacks import CSVLogger
-
-    from s4s_rnn import models, utils
 
     model = models.create_model(model, num_hidden, input_dim=None,
                                 input_shape=(num_tsteps, _INPUT_DIM),
@@ -57,36 +85,28 @@ def train_cross_validation(sessions, model, num_hidden, num_tsteps, date_string)
         pass
 
     kf = KFold(len(sessions))
+    func_args = []
     for train_index, test_index in kf.split(sessions):
-        print("\n--------------------------")
         train_sessions = sessions[train_index]
         test_sessions = sessions[test_index]
-        print("Training on:\n" + "\n".join(map(str, train_sessions)))
-        print("Testing on:\n" + "\n".join(map(str, test_sessions)))
+        if arguments.multi_process:
+            func_args.append([train_sessions, test_sessions, num_tsteps, base_name, 0])
+        else:
+            print("\n--------------------------")
+            print("Training on:\n" + "\n".join(map(str, train_sessions)))
+            print("Testing on:\n" + "\n".join(map(str, test_sessions)))
 
-        print("\nLoading model from: " + model_file_name)
-        json_file = open(model_file_name, 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = model_from_json(loaded_model_json)
-        loaded_model.compile(loss='mean_squared_error', optimizer='rmsprop')
+            print("\nLoading model from: " + model_file_name)
+            train_keras_model(train_sessions, test_sessions, num_tsteps, base_name)
+            print("Saved model to disk")
+            pass
 
-        match = re.match('.+/running_indoor_(.+)/(\d+)>', str(test_sessions[0]))
-        # put name of evaluation set in saved filenames
-        cross_validation_name = "%s_%s_%s" % (base_name, match.groups()[0], match.groups()[1])
-
-        train_data_x, train_data_y = utils.get_data_from_sessions(train_sessions, num_tsteps)
-        test_data_x, test_data_y = utils.get_data_from_sessions(test_sessions, num_tsteps)
-
-        csv_logger = CSVLogger(cross_validation_name + "_training.log", append=False)
-        loaded_model.fit(train_data_x, train_data_y, batch_size=(1),
-                         nb_epoch=arguments.num_epoch, validation_data=(test_data_x, test_data_y),
-                         callbacks=[csv_logger], verbose=2)
-
-        # serialize weights to HDF5
-        loaded_model.save_weights(cross_validation_name + "_weights.h5")
-        print("Saved model to disk")
-
+        pass
+    if arguments.multi_process:
+        import sweat4science as s4s
+        print("Starting analysis for " + str(len(func_args)) + " processes")
+        results_handle = s4s.execute_parallel(train_keras_model, func_args)
+        s4s.wait_for_results(results_handle)
         pass
 
     return

@@ -25,6 +25,11 @@ def create_model(model_name, hidden_neurons, input_dim, output_dim, input_shape=
         pass
     else:
         return None
+
+    if hidden_neurons == 0:
+        hidden_neurons = output_dim
+        pass
+
     if input_shape is None:
         model.add(rnn_layer(hidden_neurons, input_dim=input_dim, return_sequences=False))
         pass
@@ -32,7 +37,9 @@ def create_model(model_name, hidden_neurons, input_dim, output_dim, input_shape=
         model.add(rnn_layer(hidden_neurons, input_shape=input_shape, return_sequences=False))
         pass
 
-    model.add(Dense(output_dim, input_dim=hidden_neurons))
+    if not hidden_neurons == 0:
+        model.add(Dense(output_dim, input_dim=hidden_neurons))
+        pass
     model.add(Activation('linear'))
     #model.compile(loss='mean_squared_error', optimizer='rmsprop')
     return model

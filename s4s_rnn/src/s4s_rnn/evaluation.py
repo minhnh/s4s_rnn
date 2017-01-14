@@ -19,7 +19,13 @@ def get_session_key(session_name):
 
 
 def get_prediction_name(model_name, num_tstep, num_neuron, old_norm):
-    prediction_name = "%s_lookback%s_%sneurons" % (model_name, num_tstep, num_neuron)
+    if num_neuron.__class__.__name__ != 'int':
+        num_neuron = int(num_neuron)
+        pass
+    if num_tstep.__class__.__name__ != 'int':
+        num_tstep = int(num_tstep)
+        pass
+    prediction_name = "%s_lookback%02d_%03dneurons" % (model_name, num_tstep, num_neuron)
     if old_norm:
         prediction_name += "_oldnorm"
         pass
@@ -31,16 +37,18 @@ def parse_prediction_key(prediction_key):
     :param prediction_key:
     :return:
     """
-    match = re.match('(?:lstm|gru)_lookback(\d+)_\d+neurons(.*)', prediction_key)
+    match = re.match('(lstm|gru)_lookback(\d+)_(\d+)neurons(.*)', prediction_key)
     if match is None:
-        return None, None, None
+        return None, None, None, None, None
 
-    num_tsteps = int(match.group(1))
+    model = match.group(1)
+    num_tsteps = int(match.group(2))
+    num_neuron = int(match.group(3))
 
     old_norm = False
     time_horizon = None
-    if len(match.group(2)) != 0:
-        match2 = re.match('(_oldnorm)?(_(\d+)horizon)?',  match.group(2))
+    if len(match.group(4)) != 0:
+        match2 = re.match('(_oldnorm)?(_(\d+)horizon)?', match.group(4))
         if match2.group(1) is not None:
             old_norm = True
             pass
@@ -49,7 +57,7 @@ def parse_prediction_key(prediction_key):
             pass
         pass
 
-    return num_tsteps, old_norm, time_horizon
+    return model, num_neuron, num_tsteps, old_norm, time_horizon
 
 
 class ExperimentEvalutation(object):
@@ -134,25 +142,24 @@ class ExperimentEvalutation(object):
         :param time_horizon:
         :return: None
         """
-        num_tsteps, old_norm, time_horizon = parse_prediction_key(prediction_key)
+        model, num_neuron, num_tsteps, old_norm, time_horizon = parse_prediction_key(prediction_key)
+        weight_key = get_prediction_name(model, num_tsteps, num_neuron, old_norm)
+        if time_horizon is not None:
+            # print("\tevaluate: horizon is %d" % time_horizon)
+            pass
         if num_tsteps is None:
             print("%s evaluate: invalid prediction_name %s" % (ExperimentEvalutation.__name__, prediction_key))
             return
 
-        if prediction_key not in self.weight_files:
+        if weight_key not in self.weight_files:
             if weight_file is None:
-                print("No weight file associated with key %s" % prediction_key)
+                print("No weight file associated with key %s" % weight_key)
                 return
             self.weight_files[prediction_key] = weight_file
             pass
 
-        if time_horizon is None:
-            prediction_key_horizon = prediction_key
-        else:
-            prediction_key_horizon = prediction_key + ("_%dhorizon" % time_horizon)
-            pass
-        if prediction_key_horizon in self.predictions:
-            print("evaluate: %s already in predictions" % prediction_key_horizon)
+        if prediction_key in self.predictions:
+            print("evaluate: %s already in predictions" % prediction_key)
             return
 
         from keras.models import model_from_json
@@ -162,10 +169,11 @@ class ExperimentEvalutation(object):
         data_x = utils.reshape_array_by_time_steps(self._x_normed[scaler_key], time_steps=num_tsteps)
         data_y = utils.normalize_with_scaler(self.true_output, self._scalers[scaler_key])
 
-        prediction = utils.evaluate_model(model, self.weight_files[prediction_key],
+        prediction = utils.evaluate_model(model, self.weight_files[weight_key],
                                           data_x, data_y, horizon=time_horizon)
+        # print("\tevaluate: prediction length %d" % len(prediction))
 
-        self.add_prediction(prediction_key_horizon, prediction, old_norm=old_norm)
+        self.add_prediction(prediction_key, prediction, old_norm=old_norm)
 
         return
 
@@ -184,7 +192,7 @@ class ExperimentEvalutation(object):
 
         predictions = list(map(self.predictions.get, prediction_names))
         plotting.plot_predictions(predictions, prediction_names, self.true_output,
-                               plot_tiltle, file_name=file_name)
+                                  plot_tiltle, file_name=file_name)
         return
 
     pass
@@ -199,7 +207,7 @@ class ExperimentEvalutationDict(dict):
         self.model_json = {}
         self.sessions = {}
         self.mse = {}
-        self._true_outputs = None
+        self._true_hbms = None
         if sessions is None:
             return
 
@@ -213,21 +221,25 @@ class ExperimentEvalutationDict(dict):
 
             pass
 
-        self._get_all_true_outputs()
+        self._true_hbms = self._get_all_true_hbms()
 
         return
 
-    def _get_all_true_outputs(self):
+    def _get_all_true_hbms(self, horizon=None):
         """
-        Add all true_output array to self._true_outputs
+        Add all true_output array to self._true_hbms
         """
         true_outputs = None
         for session_key in sorted(self.keys()):
-            true_outputs = self[session_key].true_output if true_outputs is None \
-                else np.append(true_outputs, self[session_key].true_output, axis=0)
+            if horizon is None:
+                true_output = self[session_key].true_output
+            else:
+                true_output = self[session_key].true_output[-horizon:]
+                pass
+            true_outputs = true_output if true_outputs is None \
+                else np.append(true_outputs, true_output, axis=0)
             pass
-        self._true_outputs = true_outputs
-        return
+        return true_outputs
 
     def _get_all_predictions(self, prediction_key):
         """
@@ -335,7 +347,6 @@ class ExperimentEvalutationDict(dict):
             pass
 
         for prediction_name in prediction_list:
-            print("Evaluating %s" % prediction_name)
             if prediction_name not in self.model_json:
                 print("%s evaluate: unrecognized prediction %s" % (ExperimentEvalutationDict.__name__, prediction_name))
                 continue
@@ -345,6 +356,9 @@ class ExperimentEvalutationDict(dict):
                 prediction_key = prediction_name + ("_%dhorizon" % time_horizon)
             else:
                 prediction_key = prediction_name
+                pass
+
+            print("Evaluating %s" % prediction_key)
 
             for session_key in self:
                 print("\ton %s" % session_key)
@@ -352,7 +366,7 @@ class ExperimentEvalutationDict(dict):
                 pass
 
             predictions = self._get_all_predictions(prediction_key)
-            self.mse[prediction_key] = np.mean((predictions - self._true_outputs)**2)
+            self.mse[prediction_key] = np.mean((predictions - self._get_all_true_hbms(time_horizon))**2)
             print("   MSE: %f" % self.mse[prediction_key])
             print("  RMSE: %f\n" % np.sqrt(self.mse[prediction_key]))
 
@@ -390,9 +404,10 @@ class ExperimentEvalutationDict(dict):
                 print("plot_error_box_predictions: prediction %s is not evaluated" % key)
                 continue
             else:
+                model, num_neuron, num_tsteps, old_norm, time_horizon = parse_prediction_key(key)
                 prediction = self._get_all_predictions(key)
-                # print(self._true_outputs.shape)
-                abs_error = np.abs(prediction - self._true_outputs)
+                # print(self._true_hbms.shape)
+                abs_error = np.abs(prediction - self._get_all_true_hbms(time_horizon))
                 # print("mse: %.2f" % np.mean(squared_error))
                 abs_errors.append(abs_error)
                 pass

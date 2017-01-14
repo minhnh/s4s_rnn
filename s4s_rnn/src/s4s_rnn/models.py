@@ -1,7 +1,7 @@
 import  numpy
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation
-from keras.layers.recurrent import LSTM, GRU
+from keras.layers.recurrent import LSTM, GRU, SimpleRNN
 
 import sweat4science as s4s
 
@@ -19,10 +19,10 @@ def create_model(model_name, hidden_neurons, input_dim, output_dim, input_shape=
     model = Sequential()
     if model_name == 'lstm':
         rnn_layer = LSTM
-        pass
     elif model_name == 'gru':
         rnn_layer = GRU
-        pass
+    elif model_name == 'rnn':
+        rnn_layer = SimpleRNN
     else:
         return None
 
@@ -37,9 +37,7 @@ def create_model(model_name, hidden_neurons, input_dim, output_dim, input_shape=
         model.add(rnn_layer(hidden_neurons, input_shape=input_shape, return_sequences=False))
         pass
 
-    if not hidden_neurons == 0:
-        model.add(Dense(output_dim, input_dim=hidden_neurons))
-        pass
+    model.add(Dense(output_dim, input_dim=hidden_neurons))
     model.add(Activation('linear'))
     #model.compile(loss='mean_squared_error', optimizer='rmsprop')
     return model

@@ -21,11 +21,11 @@ def get_arguments():
 
 
 def main(parser):
+    arguments = parser.parse_args()
+
     from sweat4science.evaluation.sessionset import MF_sessionset as mfs
     from sweat4science.workspace.Workspace import Workspace
     from sweat4science.s4sconfig import workspace_dir
-
-    arguments = parser.parse_args()
 
     if arguments.scenario == 'hbm_velocity':
         workspace_folder = os.path.join(workspace_dir, "session-data")

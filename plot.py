@@ -3,10 +3,6 @@ import os
 import argparse
 import textwrap
 
-
-from s4s_rnn import utils, plotting, evaluation
-
-
 def get_arguments():
     parser = argparse.ArgumentParser(description=textwrap.dedent('''
         Script to run plotting functions
@@ -26,6 +22,7 @@ def main(parser):
     from sweat4science.evaluation.sessionset import MF_sessionset as mfs
     from sweat4science.workspace.Workspace import Workspace
     from sweat4science.s4sconfig import workspace_dir
+    from s4s_rnn import utils, plotting, evaluation
 
     if arguments.scenario == 'hbm_velocity':
         workspace_folder = os.path.join(workspace_dir, "session-data")

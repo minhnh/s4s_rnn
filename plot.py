@@ -4,10 +4,6 @@ import argparse
 import textwrap
 
 
-from sweat4science.evaluation.sessionset import MF_sessionset as mfs
-from sweat4science.workspace.Workspace import Workspace
-from sweat4science.s4sconfig import workspace_dir
-
 from s4s_rnn import utils, plotting, evaluation
 
 
@@ -25,6 +21,10 @@ def get_arguments():
 
 
 def main(parser):
+    from sweat4science.evaluation.sessionset import MF_sessionset as mfs
+    from sweat4science.workspace.Workspace import Workspace
+    from sweat4science.s4sconfig import workspace_dir
+
     arguments = parser.parse_args()
 
     if arguments.scenario == 'hbm_velocity':
@@ -50,7 +50,7 @@ def main(parser):
 
         model_json = arguments.file.read()
         model = model_from_json(model_json)
-        plot(model, show_shapes=True)
+        plot(model)
 
         pass
     return

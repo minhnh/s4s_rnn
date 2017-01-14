@@ -25,7 +25,7 @@ def get_arguments():
     parser.add_argument('num_epoch', type=int,
                         help='number of epochs to run training')
     parser.add_argument('--model', '-m', type=str,
-                        choices=['lstm', 'gru'], default='lstm',
+                        choices=['lstm', 'gru', 'rnn'], default='lstm',
                         help='RNN model to train')
     parser.add_argument('--scenario', '-s', type=str,
                         choices=['vary_time', 'vary_neuron'],
